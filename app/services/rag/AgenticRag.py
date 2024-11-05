@@ -48,7 +48,7 @@ class AgenticState(TypedDict):
     messages: list[BaseMessage]
     context: list[str]
     response: str
-    error: str | None
+    error: Optional[str]
 
 
 class AgenticRAG:
