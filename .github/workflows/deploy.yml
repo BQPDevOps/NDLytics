@@ -1,0 +1,33 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Zip code and upload to S3 (Optional)
+        run: |
+          zip -r ndlytics.zip .
+          aws s3 cp ndlytics.zip s3://nda-storage-v1/logs/deployments/ndlytics/ndlytics.zip
+
+      - name: Deploy to CodeDeploy
+        run: |
+          aws deploy create-deployment \
+            --application-name NDLyticsApp \
+            --deployment-group-name NDLyticsDeploymentGroup \
+            --s3-location bucket=nda-storage-v1,key=logs/deployments/ndlytics/ndlytics.zip,bundleType=zip
