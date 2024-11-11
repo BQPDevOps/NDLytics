@@ -372,7 +372,7 @@ class WidgetPage:
         """Generates a random widget_id to avoid duplicates."""
         return str(uuid.uuid4())  # Use UUID to generate unique IDs
 
-    def calculate_layout(self, widgets, total_width=10):
+    def calculate_layout(self, widgets, total_width=12):
         rows = []
         current_row = []
         current_width = 0
@@ -383,11 +383,8 @@ class WidgetPage:
                 widget["widget_configuration"],
                 widget["widget_instance_id"],
             )
-            widget_width = getattr(
-                widget_instance, "width", 5
-            )  # Default to 5 if width is not set
+            widget_width = widget["widget_configuration"].get("widget_width", 6)
             if current_width + widget_width > total_width:
-                # Start a new row
                 rows.append(current_row)
                 current_row = [widget]
                 current_width = widget_width
@@ -395,7 +392,6 @@ class WidgetPage:
                 current_row.append(widget)
                 current_width += widget_width
 
-        # Add the last row if it's not empty
         if current_row:
             rows.append(current_row)
 
@@ -408,18 +404,15 @@ class WidgetPage:
             self.render_widget_creator()
             return
 
-        # Add the "Add Widget" button at the top when in edit mode
         if self.page_mode == "edit":
             with ui.row().classes("w-full justify-end"):
                 ui.button("Add Widget", on_click=self.toggle_widget_create_mode)
                 ui.button("Save Layout", on_click=lambda: self.save_layout())
 
-        # Calculate the layout
         layout = self.calculate_layout(self.page_widget_layout_configuration)
 
-        # Render the layout
         for row in layout:
-            with ui.row().classes("w-full flex flex-wrap -mx-2"):
+            with ui.row().classes("w-full flex flex-nowrap -mx-2"):
                 for widget_info in row:
                     try:
                         widget_instance = self.get_widget_by_id(
@@ -433,10 +426,8 @@ class WidgetPage:
                             )
                             continue
 
-                        widget_width = getattr(
-                            widget_instance, "widget_width", 5
-                        )  # Default to 5 if width is not set
-                        percentage_width = math.floor((widget_width / 11) * 100)
+                        widget_width = widget_info["widget_configuration"].get("widget_width", 6)
+                        percentage_width = math.floor((widget_width / 12) * 100)
                         with ui.column().classes(f"p-2").style(
                             f"width: {percentage_width}%;"
                         ):
@@ -489,7 +480,7 @@ class WidgetPage:
                 self.render_widgets.refresh()
 
         def increase_width():
-            if widget.widget_width < 10:
+            if widget.widget_width < 12:
                 widget.widget_width += 1
                 widget_info["widget_configuration"][
                     "widget_width"
@@ -546,7 +537,7 @@ class WidgetPage:
         with ui.row():
             ui.label("Widget Width:")
             ui.select(
-                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+                [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
                 value=widget.widget_width,
                 on_change=lambda e: update_width(e.value),
             )

@@ -41,15 +41,5 @@ class Config(BaseSettings):
         env_file_encoding = "utf-8"
         env_prefix = ""
 
-    # def __init__(self, **kwargs):
-    #     print("Env file path:", self.Config.env_file)
-    #     print("File exists:", os.path.exists(self.Config.env_file))
-    #     print("Current working directory:", os.getcwd())
-    #     print(
-    #         "Environment variables:",
-    #         {k: v for k, v in os.environ.items() if "AWS" in k},
-    #     )
-    #     super().__init__(**kwargs)
-
 
 config = Config()

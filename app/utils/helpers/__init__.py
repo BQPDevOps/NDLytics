@@ -41,10 +41,6 @@ def tcn_adapter():
     return TCNAdapter(config.base_url_tcn, config.token_tcn)
 
 
-# def rag_adapter(account_id, default_collection):
-#     return RAGAdapter(RAG_BASE_URL, RAG_API_KEY, account_id, default_collection)
-
-
 __all__ = [
     "cognito_adapter",
     "s3_storage_adapter",

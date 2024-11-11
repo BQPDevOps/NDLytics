@@ -34,8 +34,8 @@ class GridCard:
         with ui.card().style(
             """
             display:flex;
-            height:20rem;
-            width:16rem;
+            height:18rem;
+            width:14rem;
             border-radius:0.5rem;
             cursor:pointer;
             transition:all 0.3s;
@@ -56,7 +56,7 @@ class GridCard:
                 "width:100%;height:60%;display:flex;align-items:center;justify-content:center;"
             ):
                 with ui.card().style(
-                    f"background-color:{self.grid_item_icon_background_color};display:flex;justify-content:center;align-items:center;width:80%;border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 0 5px 0 rgba(0,0,0,0.1);"
+                    f"background-color:{self.grid_item_icon_background_color};display:flex;justify-content:center;align-items:center;width:70%;border: 1px solid #e2e8f0; border-radius: 0.5rem; box-shadow: 0 0 5px 0 rgba(0,0,0,0.1);"
                 ):
                     ui.icon(
                         self.grid_item_icon, color=self.grid_item_icon_color
