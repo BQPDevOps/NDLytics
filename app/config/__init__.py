@@ -34,6 +34,7 @@ class Config(BaseSettings):
     groq_api_key: str
     nomic_api_key: str
     aws_settings_table_name: str
+    aws_tickets_table_name: str
 
     class Config:
         case_sensitive = False

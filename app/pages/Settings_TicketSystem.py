@@ -596,8 +596,6 @@ class SettingsTicketSystem(StaticPage):
                 ):
                     ui.icon("o_keyboard_arrow_right").classes("text-4xl text-white")
 
-        with ui.row().classes("w-full flex justify-end items-center"):
-            ui.button(icon="o_save", on_click=lambda: ui.notify("Save"))
         with ui.row().style("display:flex;flex-direction:row;width:100%;height:80vh;"):
             self._category_column()
             _separator()

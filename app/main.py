@@ -81,9 +81,9 @@ def render_unauthorized_page():
 # Production
 ui.run(
     storage_secret=config.app_storage_secret,
-    reload=False,
+    # reload=False,
     title="NDLytics",
-    show=False,
-    port=8000,  # env does not work for setting this
+    # show=False,
+    port=8040,  # env does not work for setting this
     host="0.0.0.0",
 )

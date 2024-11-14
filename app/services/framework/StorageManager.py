@@ -1,4 +1,5 @@
 from nicegui import app
+from models import IDToken
 
 
 class StorageManager:
@@ -13,3 +14,10 @@ class StorageManager:
 
     def delete_from_storage(self, key):
         app.storage.user.delete(key)
+
+    def list_storage_keys(self):
+        return list(app.storage.user.keys())
+
+    def get_user_id(self):
+        user_token = IDToken(app.storage.user.get("id_token"))
+        return user_token.sub

@@ -17,6 +17,7 @@ class StaticPage(ABC):
         page_description,
         storage_manager,
         back_button_route=None,
+        root_route=None,
     ):
         self.page_title = page_title
         self.page_route = page_route
@@ -27,6 +28,7 @@ class StaticPage(ABC):
         self.theme_manager = ThemeManager()
         self.page_state = {}
         self.messages_count = 1
+        self.root_route = root_route
 
         self.toolbar_items = {
             "menu": {
@@ -89,7 +91,10 @@ class StaticPage(ABC):
                                         required_permissions
                                     )
                                 ):
-                                    selected = self.page_route == route
+                                    selected = (
+                                        self.page_route == route
+                                        or self.root_route == route
+                                    )
 
                                     bg_color = (
                                         f"{self.theme_manager.colors['primary']['highlight']}"

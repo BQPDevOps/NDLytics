@@ -35,12 +35,13 @@ class Models:
         self.nomic_embeddings = NomicEmbeddings(
             model="nomic-embed-text-v1.5",
         )
-        self.ollama_embeddings = OllamaEmbeddings(
-            model="nomic-embed-text-v1.5", base_url="http://127.0.0.1:11434"
+        self.ollama_embeddings = OllamaEmbeddings(model="nomic-embed-text-v1.5")
+        self.model_groq_ollama = ChatGroq(
+            model="llama-3.2-3b-preview",
+            temperature=0,
+            api_key=config.groq_api_key,
         )
-        self.model_ollama = ChatOllama(
-            model="llama3.1:8b", base_url="http://127.0.0.1:11434", temperature=0
-        )
+        self.model_ollama = ChatOllama(model="llama-3.2-3b-preview", temperature=0)
 
 
 class AgenticState(TypedDict):
@@ -385,9 +386,12 @@ class AgenticRAG:
 
     def setup_language_models(self):
         """Setup language models and embeddings with caching"""
-        self.local_llm = "llama3.1:8b"
-        self.llm = ChatOllama(
-            model=self.local_llm, temperature=0, base_url="http://127.0.0.1:11434"
+        self.local_llm = "llama-3.2-3b-preview"
+        self.llm = ChatGroq(
+            model=self.local_llm,
+            temperature=0,
+            request_timeout=10,
+            api_key=config.groq_api_key,
         )
         self.nomic_embeddings = self.models.nomic_embeddings
 
@@ -468,11 +472,11 @@ class AgenticRAG:
                 return state
 
             try:
-                # Increase timeout to 30 seconds for local LLM processing
-                async with asyncio.timeout(30):
+                async with asyncio.timeout(5):
                     query = state["messages"][-1].content
                     context = state["context"]
 
+                    # Log context for debugging
                     self.logger.info(
                         f"Context length: {len(context[0]) if context else 0} characters"
                     )
@@ -491,24 +495,8 @@ Question: {query}
 
 Provide a clear and concise answer using only the information from the context. If the specific information isn't in the context, say so."""
 
-                    try:
-                        # Add timeout specifically for LLM call
-                        response = await asyncio.wait_for(
-                            self.llm.ainvoke([HumanMessage(content=prompt)]), timeout=25
-                        )
-                        return {**state, "response": response.content}
-                    except asyncio.TimeoutError:
-                        return {
-                            **state,
-                            "response": "The local LLM is taking too long to respond. Please try again.",
-                        }
-                    except Exception as e:
-                        self.logger.error(f"LLM invocation error: {str(e)}")
-                        return {
-                            **state,
-                            "response": f"Error generating response: {str(e)}",
-                        }
-
+                    response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+                    return {**state, "response": response.content}
             except Exception as e:
                 self.logger.error(f"Generation error: {str(e)}", exc_info=True)
                 return {**state, "error": str(e)}
