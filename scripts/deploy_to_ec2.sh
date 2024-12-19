@@ -20,7 +20,7 @@ ssh -i $KEY_PATH $EC2_USER@$EC2_HOST "
     cd /home/ec2-user/NDLytics && \
 
     # Remove existing contents if any
-    rm -rf * && \
+    rm -rf * .git && \
 
     # Clone repository
     git clone $GITHUB_REPO . && \
