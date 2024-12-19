@@ -540,9 +540,11 @@ class CognitoMiddleware:
             return custom_attributes
 
         except self.client.exceptions.UserNotFoundException:
-            return "User not found."
+            print(f"User not found: {username}")
+            return {}  # Return empty dict instead of string
         except Exception as e:
-            return f"An error occurred: {str(e)}"
+            print(f"Error getting custom attributes: {str(e)}")
+            return {}  # Return empty dict instead of string
 
     def update_user_attributes(self, username, attributes):
         """

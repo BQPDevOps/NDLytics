@@ -76,17 +76,39 @@ class GoalsComponent:
         return attributes
 
     def _get_user_record(self):
-        user_id = self.cognito_middleware.get_user_id()
-        username = self.session_manager.get_from_storage("username")
-        company_id = self.cognito_middleware.get_all_custom_attributes(username).get(
-            "custom:company_id"
-        )
-        key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
         try:
-            user_record = self.dynamo_middleware.get_item(key)
-            return user_record if user_record else None
+            # Get current user ID from Cognito
+            user_id = self.cognito_middleware.get_user_id()
+            if not user_id:
+                print("Could not get user_id")
+                return None
+
+            # Get username from storage
+            username = self.session_manager.get_from_storage("username")
+            if not username:
+                print("Could not get username from storage")
+                return None
+
+            # Get company_id from Cognito attributes
+            attributes = self.cognito_middleware.get_all_custom_attributes(username)
+            company_id = attributes.get("custom:company_id")
+            if not company_id:
+                print(f"No company_id found for user {username}")
+                return None
+
+            # Create the key for DynamoDB query
+            key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
+
+            # Get user record from DynamoDB
+            try:
+                user_record = self.dynamo_middleware.get_item(key)
+                return user_record if user_record else None
+            except Exception as e:
+                print(f"Error getting user record from DynamoDB: {e}")
+                return None
+
         except Exception as e:
-            print(f"Error getting user record: {e}")
+            print(f"Error in _get_user_record: {e}")
             return None
 
     def render(self):
