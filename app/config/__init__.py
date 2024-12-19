@@ -4,8 +4,8 @@ from pathlib import Path
 
 class Config(BaseSettings):
     # BOTO 3
-    aws_access_key_id: str
-    aws_secret_access_key: str
+    aws_access_key: str
+    aws_secret_key: str
     aws_region: str
 
     # AWS COGNITO
@@ -50,6 +50,9 @@ class Config(BaseSettings):
     app_reload: bool
     app_port: int
     app_name: str
+
+    # Docker
+    compose_project_name: str
 
     class Config:
         case_sensitive = False

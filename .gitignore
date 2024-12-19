@@ -121,6 +121,10 @@ dmypy.json
 # Cython debug symbols
 cython_debug/  
 
+# Docker
+.docker/
+docker-compose.override.yml
+
 # **Explanation of Common Entries:**
 
 # * **`__pycache__/`:**  Stores compiled Python bytecode files.
