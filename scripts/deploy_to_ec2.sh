@@ -19,7 +19,10 @@ ssh -i $KEY_PATH $EC2_USER@$EC2_HOST "
     mkdir -p /home/ec2-user/NDLytics && \
     cd /home/ec2-user/NDLytics && \
 
-    # Clone repository first
+    # Remove existing contents if any
+    rm -rf * && \
+
+    # Clone repository
     git clone $GITHUB_REPO . && \
 
     # Then copy and make scripts executable
