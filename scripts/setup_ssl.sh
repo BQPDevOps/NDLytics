@@ -1,16 +1,15 @@
 #!/bin/bash
 
-# Check if domain name is provided
-if [ -z "$1" ]; then
-    echo "Please provide a domain name"
-    echo "Usage: $0 yourdomain.com"
-    exit 1
-fi
+# Install certbot
+sudo dnf install -y certbot python3-certbot-nginx
 
-DOMAIN=$1
+# Get SSL certificate
+sudo certbot --nginx \
+    -d ${DOMAIN_NAME} \
+    --non-interactive \
+    --agree-tos \
+    --email ${SSL_EMAIL} \
+    --redirect
 
-# Install SSL certificate
-sudo certbot --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN
-
-# Add SSL renewal to crontab
+# Add automatic renewal
 (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
