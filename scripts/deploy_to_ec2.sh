@@ -16,14 +16,17 @@ scp -i $KEY_PATH \
 
 # SSH into EC2 and setup
 ssh -i $KEY_PATH $EC2_USER@$EC2_HOST "
+    mkdir -p /home/ec2-user/NDLytics && \
     cd /home/ec2-user/NDLytics && \
+
+    # Clone repository first
+    git clone $GITHUB_REPO . && \
+
+    # Then copy and make scripts executable
     chmod +x *.sh && \
 
     # Run setup scripts
     ./setup_ec2.sh && \
-
-    # Clone repository
-    git clone $GITHUB_REPO . && \
 
     # Configure AWS credentials
     aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID} && \
