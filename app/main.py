@@ -6,6 +6,7 @@ from modules.session_manager import SessionManager
 from pages import *
 
 import tracemalloc
+import os
 
 tracemalloc.start()
 
@@ -62,7 +63,7 @@ def root_unauthorized():
     unauthorized_page()
 
 
-app.add_static_files("/static", "static")
+app.add_static_files(os.path.join(os.path.dirname(__file__), "static"), "static")
 
 ui.run(
     storage_secret=config.app_storage_secret,
