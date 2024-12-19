@@ -7,6 +7,11 @@ class Config(BaseSettings):
     aws_access_key: str
     aws_secret_key: str
     aws_region: str
+    aws_account_id: str
+    aws_ecr_repository: str
+    aws_image_tag: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
 
     # AWS COGNITO
     aws_cognito_user_pool_id: str
