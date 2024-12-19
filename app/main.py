@@ -63,7 +63,9 @@ def root_unauthorized():
     unauthorized_page()
 
 
-app.add_static_files("/static", "static")
+import os
+
+app.add_static_files("/static", os.path.join(os.path.dirname(__file__), "static"))
 
 ui.run(
     storage_secret=config.app_storage_secret,
