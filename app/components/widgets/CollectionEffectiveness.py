@@ -683,6 +683,124 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
         return super().get_cached()
 
+    def _render_placement_analysis(self, metrics):
+        if "placement_metrics" not in metrics:
+            with ui.card().classes("w-full p-4"):
+                ui.label("No placement metrics available").classes("text-lg")
+                return
+
+        # Get unique clients from the data
+        client_numbers = sorted(set(self.processed_accounts["client_number"]))
+        selected_client = client_numbers[0] if client_numbers else None
+
+        @ui.refreshable
+        def placement_content(selected_client_number):
+            # Filter data for selected client
+            client_accounts = self.processed_accounts[
+                self.processed_accounts["client_number"] == selected_client_number
+            ]
+            client_transactions = self.processed_transactions[
+                self.processed_transactions["file_number"].isin(
+                    client_accounts["file_number"]
+                )
+            ]
+
+            # Create performance chart for selected client
+            performance_chart = {
+                "chart": {"type": "column"},
+                "title": {
+                    "text": f"Collection Performance - Client {selected_client_number}"
+                },
+                "xAxis": {
+                    "categories": [
+                        "Month 1",
+                        "Month 2",
+                        "Month 3",
+                        "Month 4",
+                        "Month 5",
+                        "Month 6",
+                    ]
+                },
+                "yAxis": [
+                    {
+                        "title": {"text": "Amount ($)"},
+                        "labels": {"format": "${value:,.0f}"},
+                    },
+                    {
+                        "title": {"text": "Success Rate (%)"},
+                        "opposite": True,
+                    },
+                ],
+                "series": [
+                    {
+                        "name": "Collections",
+                        "type": "column",
+                        "data": monthly_collections[:6],  # Show first 6 months
+                    },
+                    {
+                        "name": "Success Rate",
+                        "type": "line",
+                        "yAxis": 1,
+                        "data": success_rates[:6],  # Show first 6 months
+                    },
+                ],
+            }
+
+            ui.highchart(performance_chart).classes("w-full h-64")
+
+            # Add client metrics cards
+            with ui.grid(columns=2).classes("w-full gap-6 mt-6"):
+                # Performance Metrics Card
+                with ui.card().classes("p-4"):
+                    ui.label("Performance Metrics").classes("text-lg font-bold mb-2")
+                    with ui.column().classes("gap-2"):
+                        ui.label(f"Total Accounts: {len(client_accounts):,}")
+                        ui.label(
+                            f"Active Accounts: {len(client_accounts[client_accounts['account_status'].isin(self.status_groups['Active'])]):,}"
+                        )
+                        ui.label(
+                            f"Total Collections: ${client_transactions['payment_amount'].sum():,.2f}"
+                        )
+                        success_rate = (
+                            len(client_transactions["file_number"].unique())
+                            / len(client_accounts)
+                            * 100
+                        )
+                        ui.label(f"Overall Success Rate: {success_rate:.1f}%")
+
+                # Status Distribution Card
+                with ui.card().classes("p-4"):
+                    ui.label("Status Distribution").classes("text-lg font-bold mb-2")
+                    with ui.column().classes("gap-2"):
+                        for group_name, statuses in self.status_groups.items():
+                            count = len(
+                                client_accounts[
+                                    client_accounts["account_status"].isin(statuses)
+                                ]
+                            )
+                            percentage = (
+                                count / len(client_accounts) * 100
+                                if len(client_accounts) > 0
+                                else 0
+                            )
+                            ui.label(f"{group_name}: {count:,} ({percentage:.1f}%)")
+
+        # Create client selector
+        def on_select(e):
+            nonlocal selected_client
+            selected_client = e.value
+            placement_content.refresh(selected_client)
+
+        ui.select(
+            options={str(c): f"Client {c}" for c in client_numbers},
+            value=str(selected_client) if selected_client else None,
+            label="Select Client",
+            on_change=on_select,
+        ).classes("w-full mb-4")
+
+        if selected_client:
+            placement_content(selected_client)
+
 
 def create_collection_effectiveness_widget(
     widget_configuration: dict = None, force_refresh=False
