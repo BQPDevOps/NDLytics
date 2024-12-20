@@ -45,20 +45,21 @@ class ActivitiesComponent:
 
     @ui.refreshable
     def render_activity_feed(self):
-        collection_insights_widget = create_collection_insights_widget(
-            force_refresh=self.force_refresh
-        )
-        collection_insights_widget.render()
+        pass
+        # collection_insights_widget = create_collection_insights_widget(
+        #     force_refresh=self.force_refresh
+        # )
+        # collection_insights_widget.render()
 
-        portfolio_widget = create_portfolio_performance_widget(
-            force_refresh=self.force_refresh
-        )
-        portfolio_widget.render()
+        # portfolio_widget = create_portfolio_performance_widget(
+        #     force_refresh=self.force_refresh
+        # )
+        # portfolio_widget.render()
 
-        effectiveness_widget = create_collection_effectiveness_widget(
-            force_refresh=self.force_refresh
-        )
-        effectiveness_widget.render()
+        # effectiveness_widget = create_collection_effectiveness_widget(
+        #     force_refresh=self.force_refresh
+        # )
+        # effectiveness_widget.render()
 
         # risk_scoring_widget = create_risk_scoring_widget(
         #     force_refresh=self.force_refresh
