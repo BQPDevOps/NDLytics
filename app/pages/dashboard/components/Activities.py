@@ -8,7 +8,10 @@ class ActivitiesComponent:
         self.theme_manager = ThemeManager()
         self.style_manager = StyleManager()
         self.force_refresh = False
+        self.active_view = "strategy"
+        self.widgets = {}  # Store widget instances
         self._config()
+        self._init_widgets()
 
     def _config(self):
 
@@ -16,16 +19,16 @@ class ActivitiesComponent:
             {
                 "activities_component": {
                     "action_bar": """
-                    display:flex;
-                    justify-content:flex-end;
-                    align-items:center;
-                    padding:0.5rem;
-                    width:100%;
-                    height:2.5rem;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0 0.5rem;
+                    width: 100%;
+                    height: 2.5rem;
                     background-color:{self.theme_manager.get_color("base-color.white")};
-                    border-radius:5px;
-                    border:1px solid rgba(88,152,212,0.3);
-                    box-shadow:0 0 0 1px rgba(88,152,212,0.2);
+                    border-radius: 5px;
+                    border: 1px solid rgba(88,152,212,0.3);
+                    box-shadow: 0 0 0 1px rgba(88,152,212,0.2);
                     """,
                     "activity_feed": """
                     width:100%;
@@ -38,35 +41,74 @@ class ActivitiesComponent:
             }
         )
 
+    def _init_widgets(self):
+        # Initialize all widgets
+        self.widgets["collection_insights"] = create_collection_insights_widget(
+            force_refresh=self.force_refresh
+        )
+        self.widgets["portfolio_performance"] = create_portfolio_performance_widget(
+            force_refresh=self.force_refresh
+        )
+        self.widgets["collection_effectiveness"] = (
+            create_collection_effectiveness_widget(force_refresh=self.force_refresh)
+        )
+
     def refresh_activities(self):
         self.force_refresh = True
         # Refresh the UI component
         self.render_activity_feed.refresh()
 
+    def switch_view(self, view):
+        self.active_view = view
+        self.render_action_bar.refresh()
+        self.render_activity_feed.refresh()
+
+    @ui.refreshable
+    def render_action_bar(self):
+        with ui.row():
+            for view, label in [
+                ("strategy", "Strategy"),
+                ("performance", "Performance"),
+                ("insights", "Insights"),
+            ]:
+                is_active = self.active_view == view
+                ui.button(label, on_click=lambda v=view: self.switch_view(v)).props(
+                    f"flat size=sm {'text-primary' if is_active else ''}"
+                ).style(
+                    f"""
+                    font-size: 0.9rem;
+                    color: {'#1976D2' if is_active else '#666'};
+                    font-weight: {'500' if is_active else '400'};
+                    border-bottom: {'2px solid #1976D2' if is_active else 'none'};
+                    border-radius: 0;
+                    """
+                )
+        ui.button(icon="refresh", on_click=self.refresh_activities).props(
+            "round size=sm"
+        )
+
     @ui.refreshable
     def render_activity_feed(self):
-        pass
-        # collection_insights_widget = create_collection_insights_widget(
-        #     force_refresh=self.force_refresh
-        # )
-        # collection_insights_widget.render()
+        with ui.element("transition").props(
+            "appear enter-active-class='animated fadeIn' leave-active-class='animated fadeOut'"
+        ):
+            if self.active_view == "strategy":
+                with ui.element("div").classes("strategy-container").style(
+                    "width: 100%"
+                ):
+                    self.widgets["collection_effectiveness"].render()
 
-        # portfolio_widget = create_portfolio_performance_widget(
-        #     force_refresh=self.force_refresh
-        # )
-        # portfolio_widget.render()
+            elif self.active_view == "performance":
+                with ui.element("div").classes("performance-container").style(
+                    "width: 100%"
+                ):
+                    self.widgets["portfolio_performance"].render()
 
-        # effectiveness_widget = create_collection_effectiveness_widget(
-        #     force_refresh=self.force_refresh
-        # )
-        # effectiveness_widget.render()
-
-        # risk_scoring_widget = create_risk_scoring_widget(
-        #     force_refresh=self.force_refresh
-        # )
-        # risk_scoring_widget.render()
-
-        self.force_refresh = False
+            elif self.active_view == "insights":
+                with ui.element("div").classes("insights-container").style(
+                    "width: 100%"
+                ):
+                    self.widgets["collection_insights"].render()
 
     def render(self):
         with ui.column().style(
@@ -75,9 +117,7 @@ class ActivitiesComponent:
             with ui.row().style(
                 self.style_manager.get_style("activities_component.action_bar")
             ):
-                ui.button(icon="refresh", on_click=self.refresh_activities).props(
-                    "round size=sm"
-                )
+                self.render_action_bar()
             with ui.column().style(
                 self.style_manager.get_style("activities_component.activity_feed")
             ):
