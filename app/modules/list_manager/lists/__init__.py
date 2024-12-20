@@ -43,10 +43,31 @@ application_lists = {
             "permissions": ["dashboard_view"],
         },
         {
+            "title": "Reports",
+            "icon": "bar_chart",
+            "color": "rgba(255,255,255,1)",
+            "route": "/reports",
+            "permissions": ["dashboard_view"],
+        },
+        {
             "title": "Campaigns",
             "icon": "dialpad",
             "color": "rgba(255,255,255,1)",
             "route": "/campaigns",
+            "permissions": ["dashboard_view"],
+        },
+        {
+            "title": "InteliDoc",
+            "icon": "memory",
+            "color": "rgba(255,255,255,1)",
+            "route": "/intelidoc",
+            "permissions": ["dashboard_view"],
+        },
+        {
+            "title": "Resolutions",
+            "icon": "handshake",
+            "color": "rgba(255,255,255,1)",
+            "route": "/resolutions",
             "permissions": ["dashboard_view"],
         },
         {
