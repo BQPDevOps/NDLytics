@@ -8,6 +8,8 @@ from models import TaskModel
 from datetime import datetime
 from utils.helpers import *
 from config import config
+import asyncio
+import uuid
 
 
 class TasksComponent:
@@ -41,6 +43,17 @@ class TasksComponent:
                     font-weight:bold;
                     color:#4A4A4A;
                     """,
+                    "add_task_modal_header_container": """
+                    display:flex;
+                    width:100%;
+                    height:4.5rem;
+                    margin-bottom:1rem;
+                    """,
+                    "add_task_modal_input_container": """
+                    width:100%;
+                    padding-top:0.5rem;
+                    height:30rem;
+                    """,
                 }
             }
         )
@@ -66,90 +79,313 @@ class TasksComponent:
 
         return response["Items"] if "Items" in response else []
 
-    def render(self):
-        tasks = self._get_tasks()
-        formatted_tasks = [dynamo_to_json(task) for task in tasks]
-        today = datetime.now().date()
-
-        today_tasks = []
-        future_tasks = []
-
-        for task in formatted_tasks:
-            try:
-                task_date = datetime.strptime(
-                    task["task_due_date"].split()[0], "%Y-%m-%d"
-                ).date()
-                if task["task_status"].lower() == "pending":
-                    if task_date.strftime("%Y-%m-%d") == today.strftime("%Y-%m-%d"):
-                        today_tasks.append(task)
-                    elif task_date > today:
-                        future_tasks.append(task)
-            except Exception as e:
-                print(f"Error processing task: {task}")
-                print(f"Error: {str(e)}")
-
-        # Today's Tasks Card
-        with ui.card().classes("w-full flex flex-col mb-4"):
-            with ui.row().style(
-                self.style_manager.get_style("todo_component.title_container")
-            ):
-                ui.label(f"Due Today").style(
-                    self.style_manager.get_style("todo_component.title_text")
-                )
-                ui.space()
-                ui.label(f"({len(today_tasks)})").style(
-                    self.style_manager.get_style("todo_component.title_text")
-                )
-            if today_tasks:
-                with ui.column().classes("w-full"):
-                    with ui.scroll_area().classes("w-full max-h-[300px]"):
-                        with ui.list().props("bordered separator").classes("w-full"):
-                            for task in today_tasks:
-                                self._render_task_item(task)
+    @ui.refreshable
+    def render_tasks_list(self, tasks_data, is_today=True):
+        try:
+            if tasks_data:
+                for task in tasks_data:
+                    self._render_task_item(task)
             else:
                 with ui.column().classes("w-full p-4 text-center"):
-                    ui.label("No tasks due today").style(
-                        "color: #666; font-style: italic;"
+                    message = "No tasks due today" if is_today else "No upcoming tasks"
+                    ui.label(message).style("color: #666; font-style: italic;")
+        except Exception as e:
+            print(f"Error rendering tasks list: {str(e)}")
+            with ui.column().classes("w-full p-4 text-center"):
+                ui.label("Unable to load tasks").style(
+                    "color: #666; font-style: italic;"
+                )
+
+    def render(self):
+        try:
+            tasks = self._get_tasks()
+            formatted_tasks = [dynamo_to_json(task) for task in tasks]
+            today = datetime.now().date()
+
+            today_tasks = []
+            future_tasks = []
+
+            for task in formatted_tasks:
+                try:
+                    task_date = datetime.strptime(
+                        task["task_due_date"].split()[0], "%Y-%m-%d"
+                    ).date()
+                    if task["task_status"].lower() == "pending":
+                        if task_date.strftime("%Y-%m-%d") == today.strftime("%Y-%m-%d"):
+                            today_tasks.append(task)
+                        elif task_date > today:
+                            future_tasks.append(task)
+                except Exception as e:
+                    print(f"Error processing task: {task}")
+                    print(f"Error: {str(e)}")
+
+            # Today's Tasks Card
+            with ui.card().classes("w-full flex flex-col mb-4"):
+                with ui.row().style(
+                    self.style_manager.get_style("todo_component.title_container")
+                ):
+                    ui.label("Due Today").style(
+                        self.style_manager.get_style("todo_component.title_text")
+                    )
+                    # ui.label(f"({len(today_tasks)})").style(
+                    #     self.style_manager.get_style("todo_component.title_text")
+                    # )
+                    ui.space()
+                    ui.button(icon="add", on_click=self.open_task_modal).props(
+                        "round size=sm"
                     )
 
-        # Future Tasks Card
-        with ui.card().classes("w-full flex flex-col"):
-            with ui.row().style(
-                self.style_manager.get_style("todo_component.title_container")
-            ):
-                ui.label(f"Upcoming Tasks").style(
-                    self.style_manager.get_style("todo_component.title_text")
-                )
-                ui.space()
-                ui.label(f"({len(future_tasks)})").style(
-                    self.style_manager.get_style("todo_component.title_text")
-                )
-            with ui.column().classes("w-full flex-grow"):
-                with ui.scroll_area().classes("w-full flex-grow"):
-                    with ui.list().props("bordered separator").classes("w-full h-full"):
-                        for task in future_tasks:
-                            self._render_task_item(task)
+                with ui.column().classes("w-full"):
+                    with ui.scroll_area().classes("w-full max-h-[300px]"):
+                        self.render_tasks_list(today_tasks, is_today=True)
 
-    def _render_task_item(self, task):
-        with ui.item().classes("w-full h-[100%]"):
-            with ui.row().classes("w-full h-[100%]"):
-                with ui.item_section().props("side"):
-                    ui.checkbox(value=task["task_status"] == "Completed")
-                with ui.item_section().classes("flex-grow gap-0"):
+            # Future Tasks Card
+            with ui.card().classes("w-full flex flex-col"):
+                with ui.row().style(
+                    self.style_manager.get_style("todo_component.title_container")
+                ):
+                    ui.label("Upcoming").style(
+                        self.style_manager.get_style("todo_component.title_text")
+                    )
+                    ui.space()
+                    ui.label(f"({len(future_tasks)})").style(
+                        self.style_manager.get_style("todo_component.title_text")
+                    )
+
+                with ui.column().classes("w-full"):
+                    with ui.scroll_area().classes("w-full max-h-[300px]"):
+                        self.render_tasks_list(future_tasks, is_today=False)
+        except Exception as e:
+            print(f"Error in render: {str(e)}")
+            with ui.column().classes("w-full p-4 text-center"):
+                ui.label("Unable to load tasks").style(
+                    "color: #666; font-style: italic;"
+                )
+
+    def _render_task_item(self, task_data):
+        item_container = (
+            ui.item()
+            .classes("w-full h-[100%] rounded-lg transition-all duration-300 bg-white")
+            .style(
+                """
+                gap:0;
+                margin:0 0;
+                border:1px solid rgba(192,192,192,0.3);
+                box-shadow:0 0 0 1px rgba(192,192,192,0.3);
+                position: relative;
+                z-index: 1;
+                """
+            )
+        )
+
+        # Track completion timer
+        completion_timer = None
+
+        async def complete_task(task_info):
+            # Animate item off screen
+            item_container.style(add="transform: translateX(-100%);")
+            await asyncio.sleep(0.3)  # Wait for animation
+
+            # Update task in DynamoDB
+            try:
+                self.dynamo_middleware.update_item(
+                    key={
+                        "task_id": {"S": task_info["task_id"]},
+                        "user_id": {"S": task_info["user_id"]},
+                    },
+                    update_expression="SET task_status = :status",
+                    expression_attribute_values={":status": {"S": "Completed"}},
+                )
+                await ui.run_javascript("window.location.reload()")
+            except Exception as e:
+                print(f"Error updating task: {str(e)}")
+                ui.notify("Error updating task status", type="negative")
+
+        async def handle_undo():
+            nonlocal completion_timer
+            # Cancel the pending completion if it exists
+            if completion_timer and not completion_timer.done():
+                completion_timer.cancel()
+
+            # Reset checkbox
+            checkbox.value = False
+
+            # Animate back to original position
+            item_container.classes(remove="w-[calc(100%-3rem)]")
+            item_container.classes(add="w-full")
+            item_container.style(remove="transform: translateX(-4rem);")
+
+        async def on_check_change(e):
+            nonlocal completion_timer
+            checked = e.value if isinstance(e, object) else e
+            if checked:
+                # Initial slide animation
+                item_container.classes(remove="w-full")
+                item_container.classes(add="w-[calc(100%-3rem)]")
+                item_container.style(add="transform: translateX(-4rem);")
+
+                # Wait for animation then start completion timer
+                await asyncio.sleep(0.3)
+
+                # Create new completion timer
+                completion_timer = asyncio.create_task(asyncio.sleep(3))
+
+                try:
+                    await completion_timer
+                    await complete_task(task_data)
+                except asyncio.CancelledError:
+                    # Timer was cancelled by undo
+                    pass
+            else:
+                # Handle unchecking normally
+                item_container.classes(remove="w-[calc(100%-3rem)]")
+                item_container.classes(add="w-full")
+                item_container.style(remove="transform: translateX(-4rem);")
+
+        with item_container:
+            with ui.row().classes("w-full h-[100%] flex items-center justify-center"):
+                checkbox = ui.checkbox(
+                    value=task_data["task_status"] == "Completed",
+                    on_change=on_check_change,
+                )
+                with ui.item_section().classes("flex-grow gap-0 relative"):
+                    ui.button("undo", on_click=handle_undo).props("flat").classes(
+                        "absolute right-[-8rem] top-1/2 -translate-y-1/2"
+                    )
                     with ui.row().classes("w-full justify-between"):
-                        ui.label(truncate_text(task["task_name"], 30)).style(
+                        ui.label(truncate_text(task_data["task_name"], 30)).style(
                             "font-size:1rem;font-weight:bold;color:#4A4A4A;"
                         )
                         ui.label(
                             datetime.strptime(
-                                task["task_due_date"], "%Y-%m-%d %H:%M:%S"
+                                task_data["task_due_date"], "%Y-%m-%d %H:%M:%S"
                             ).strftime("%m-%d-%Y")
-                        ).style("font-size:0.8rem;color:#4A4A4A;")
+                        ).style("font-size:1rem;color:#4A4A4A;padding-right:0.2rem")
                     with ui.row().classes("w-full flex-grow justify-end"):
                         with ui.row():
-                            ui.label(task["task_status"]).style(
-                                "font-size:1rem;color:#4A4A4A;"
+                            status = task_data["task_status"].lower()
+                            color = {
+                                "completed": "green",
+                                "pending": "orange",
+                                "overdue": "red",
+                            }.get(status, "grey")
+                            ui.chip(
+                                task_data["task_status"],
+                                color=color,
+                                text_color="white",
+                            ).classes("text-md").props("dense")
+
+    def open_task_modal(self):
+        with ui.dialog().props("medium") as dialog:
+            with ui.card().classes("w-full"):
+                with ui.row().classes("w-full"):
+                    ui.label("Add New Task").style(
+                        "font-size:1.2rem;font-weight:bold;color:#4A4A4A;"
+                    )
+                with ui.column().style(
+                    self.style_manager.get_style(
+                        "todo_component.add_task_modal_header_container"
+                    )
+                ):
+                    task_name = (
+                        ui.input(placeholder="Task title")
+                        .props("outlined dense")
+                        .classes("w-full")
+                    )
+
+                    with ui.row().classes("w-full flex justify-end flex-row"):
+                        with ui.column().classes("flex-grow"):
+                            priority = (
+                                ui.select({1: "Low", 2: "Medium", 3: "High"}, value=1)
+                                .props("outlined dense")
+                                .classes("w-full")
                             )
+
+                        with ui.column():
+                            with ui.input("Date").props("outlined dense") as date:
+                                with ui.menu().props("no-parent-event") as menu:
+                                    with ui.date().bind_value(date):
+                                        with ui.row().classes("justify-end"):
+                                            ui.button(
+                                                "Close", on_click=menu.close
+                                            ).props("flat")
+                                    with date.add_slot("append"):
+                                        ui.icon("edit_calendar").on(
+                                            "click", menu.open
+                                        ).classes("cursor-pointer")
+
+                # Add description editor
+                with ui.column().style(
+                    self.style_manager.get_style(
+                        "todo_component.add_task_modal_input_container"
+                    )
+                ):
+                    description = ui.editor(placeholder="Task description").style(
+                        "height:100%;width:100%;"
+                    )
+
+                with ui.row().classes("w-full flex justify-end flex-row"):
+                    ui.button("Cancel", on_click=dialog.close).props("flat")
+                    ui.button(
+                        "Add",
+                        on_click=lambda: self._add_task(
+                            dialog,
+                            task_name.value,
+                            priority.value,
+                            date.value,
+                            description.value,
+                        ),
+                    ).props("flat")
+                dialog.open()
+
+    def _add_task(self, dialog, task_name, priority, due_date, description=""):
+        try:
+            if not task_name:
+                ui.notify("Task name is required", type="warning")
+                return
+
+            user_id = self.cognito_middleware.get_user_id()
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Format due date properly
+            if not due_date:
+                due_date = current_time
+            elif isinstance(due_date, datetime):
+                due_date = due_date.replace(hour=0, minute=0, second=0).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            else:
+                # If it's just a date string, append the time
+                due_date = f"{due_date} 00:00:00"
+
+            item = {
+                "task_id": {"S": str(uuid.uuid4())},
+                "user_id": {"S": user_id},
+                "task_name": {"S": task_name},
+                "task_description": {"S": description},
+                "task_priority": {"N": str(priority)},
+                "task_due_date": {"S": str(due_date)},
+                "task_status": {"S": "pending"},
+                "task_create_on": {"S": current_time},
+                "task_created_by": {"S": user_id},
+                "task_updated_on": {"S": current_time},
+                "task_updated_by": {"S": user_id},
+                "task_assigned_to": {"L": [{"S": user_id}]},  # Add task_assigned_to
+                "task_comments": {"L": []},  # Add empty comments list
+            }
+
+            self.dynamo_middleware.put_item(item)
+            dialog.close()
+            ui.notify("Task added successfully", type="positive")
+            # Get updated tasks and refresh the view
+            tasks = self._get_tasks()
+            formatted_tasks = [dynamo_to_json(task) for task in tasks]
+            self.render_tasks_list.refresh()
+            # Refresh the entire component to update task counts
+            ui.run_javascript("window.location.reload()")
+        except Exception as e:
+            print(f"Error adding task: {str(e)}")
+            ui.notify("Error adding task", type="negative")
 
 
 def format_priority(priority: int) -> str:

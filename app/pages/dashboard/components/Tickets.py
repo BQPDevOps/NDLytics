@@ -7,7 +7,9 @@ import uuid
 from config import config
 from datetime import datetime
 from utils.helpers import *
+from utils.func import *
 from contextlib import contextmanager
+import asyncio
 
 
 def format_priority(priority: int) -> str:
@@ -208,41 +210,131 @@ class TicketsComponent:
 
     def _get_tickets(self):
         user_id = self.cognito_middleware.get_user_id()
-        expression_values = {":uid": {"S": user_id}}
+        expression_values = {":uid": {"S": user_id}, ":status": {"S": "pending"}}
         response = self.dynamo_middleware.scan(
-            filter_expression="user_id = :uid",
+            filter_expression="user_id = :uid AND ticket_status = :status",
             expression_attribute_values=expression_values,
         )
         return response["Items"] if "Items" in response else []
 
-    def _render_ticket_item(self, ticket):
-        def parse_date(date_str):
-            try:
-                return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S.%f")
-            except ValueError:
-                return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+    def parse_date(self, date_str):
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
 
-        with ui.item().classes("w-full h-[100%] rounded-lg").style(
-            "margin:0.25rem 0;border:1px solid rgba(192,192,192,0.3);box-shadow:0 0 0 1px rgba(192,192,192,0.3);"
-        ):
-            with ui.row().classes("w-full h-[100%]"):
-                with ui.item_section().props("side"):
-                    ui.checkbox(value=ticket["ticket_status"] == "completed")
-                with ui.item_section().classes("flex-grow gap-0"):
+    def _render_ticket_item(self, ticket):
+        item_container = (
+            ui.item()
+            .classes("w-full h-[100%] rounded-lg transition-all duration-300 bg-white")
+            .style(
+                """
+                gap:0;
+                margin:0 0;
+                border:1px solid rgba(192,192,192,0.3);
+                box-shadow:0 0 0 1px rgba(192,192,192,0.3);
+                position: relative;
+                z-index: 1;
+                """
+            )
+        )
+
+        # Track completion timer
+        completion_timer = None
+
+        async def complete_ticket(ticket_info):
+            # Animate item off screen
+            item_container.style(add="transform: translateX(-100%);")
+            await asyncio.sleep(0.3)  # Wait for animation
+
+            # Update ticket in DynamoDB
+            try:
+                self.dynamo_middleware.update_item(
+                    key={
+                        "ticket_id": {"S": ticket_info["ticket_id"]},
+                        "user_id": {"S": ticket_info["user_id"]},
+                    },
+                    update_expression="SET ticket_status = :status",
+                    expression_attribute_values={":status": {"S": "Completed"}},
+                )
+                await ui.run_javascript("window.location.reload()")
+            except Exception as e:
+                print(f"Error updating ticket: {str(e)}")
+                ui.notify("Error updating ticket status", type="negative")
+
+        async def handle_undo():
+            nonlocal completion_timer
+            # Cancel the pending completion if it exists
+            if completion_timer and not completion_timer.done():
+                completion_timer.cancel()
+
+            # Reset checkbox
+            checkbox.value = False
+
+            # Animate back to original position
+            item_container.classes(remove="w-[calc(100%-3rem)]")
+            item_container.classes(add="w-full")
+            item_container.style(remove="transform: translateX(-4rem);")
+
+        async def on_check_change(e):
+            nonlocal completion_timer
+            checked = e.value if isinstance(e, object) else e
+            if checked:
+                # Initial slide animation
+                item_container.classes(remove="w-full")
+                item_container.classes(add="w-[calc(100%-3rem)]")
+                item_container.style(add="transform: translateX(-4rem);")
+
+                # Wait for animation then start completion timer
+                await asyncio.sleep(0.3)
+
+                # Create new completion timer
+                completion_timer = asyncio.create_task(asyncio.sleep(3))
+
+                try:
+                    await completion_timer
+                    await complete_ticket(ticket)
+                except asyncio.CancelledError:
+                    # Timer was cancelled by undo
+                    pass
+            else:
+                # Handle unchecking normally
+                item_container.classes(remove="w-[calc(100%-3rem)]")
+                item_container.classes(add="w-full")
+                item_container.style(remove="transform: translateX(-4rem);")
+
+        with item_container:
+            with ui.row().classes("w-full h-[100%] flex items-center justify-center"):
+                checkbox = ui.checkbox(
+                    value=ticket["ticket_status"] == "Completed",
+                    on_change=on_check_change,
+                )
+                with ui.item_section().classes("flex-grow gap-0 relative"):
+                    ui.button("undo", on_click=handle_undo).props("flat").classes(
+                        "absolute right-[-8rem] top-1/2 -translate-y-1/2"
+                    )
                     with ui.row().classes("w-full justify-between"):
                         ui.label(truncate_text(ticket["ticket_title"], 30)).style(
                             "font-size:1rem;font-weight:bold;color:#4A4A4A;"
                         )
                         ui.label(
-                            parse_date(ticket["ticket_due_date"]).strftime("%m-%d-%Y")
-                        ).style("font-size:0.8rem;color:#4A4A4A;")
-                    with ui.row().classes("w-full flex-grow justify-between"):
-                        ui.label(format_priority(int(ticket["ticket_priority"]))).style(
-                            "font-size:0.9rem;color:#4A4A4A;"
-                        )
-                        ui.label(ticket["ticket_status"]).style(
-                            "font-size:0.9rem;color:#4A4A4A;"
-                        )
+                            self.parse_date(ticket["ticket_due_date"]).strftime(
+                                "%m-%d-%Y"
+                            )
+                        ).style("font-size:1rem;color:#4A4A4A;padding-right:0.2rem")
+                    with ui.row().classes("w-full flex-grow justify-end"):
+                        with ui.row():
+                            status = ticket["ticket_status"].lower()
+                            color = {
+                                "completed": "green",
+                                "pending": "orange",
+                                "overdue": "red",
+                            }.get(status, "grey")
+                            ui.chip(
+                                ticket["ticket_status"],
+                                color=color,
+                                text_color="white",
+                            ).classes("text-md").props("dense")
 
     @ui.refreshable
     def render_tickets_list(self):
@@ -250,24 +342,17 @@ class TicketsComponent:
             tickets = self._get_tickets()
             formatted_tickets = [dynamo_to_json(ticket) for ticket in tickets]
 
-            def parse_date(date_str):
-                try:
-                    return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S.%f")
-                except ValueError:
-                    return datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-
             # Sort tickets by due date
             sorted_tickets = sorted(
-                formatted_tickets, key=lambda x: parse_date(x["ticket_due_date"])
+                formatted_tickets, key=lambda x: self.parse_date(x["ticket_due_date"])
             )
 
             with ui.column().classes("w-full flex flex-col"):
                 if sorted_tickets:
                     with ui.column().classes("w-full"):
                         with ui.scroll_area().classes("w-full max-h-[600px]"):
-                            with ui.list().classes("w-full"):
-                                for ticket in sorted_tickets:
-                                    self._render_ticket_item(ticket)
+                            for ticket in sorted_tickets:
+                                self._render_ticket_item(ticket)
                 else:
                     with ui.column().classes("w-full p-4 text-center"):
                         ui.label("No tickets available").style(
@@ -297,18 +382,6 @@ class TicketsComponent:
 def format_priority(priority: int) -> str:
     priority_map = {1: "Low", 2: "Moderate", 3: "High"}
     return priority_map.get(priority, "Unknown")
-
-
-def truncate_text(text: str, max_length: int = 50) -> str:
-    return text[:max_length] + "..." if len(text) > max_length else text
-
-
-def get_ordinal_suffix(day: int) -> str:
-    if 10 <= day % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-    return suffix
 
 
 def format_date(date_str: str) -> str:
