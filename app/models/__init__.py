@@ -8,6 +8,10 @@ from .UserModel import UserModel
 from .RoleModel import RoleModel
 from .GoalModel import GoalModel
 from .TicketModel import TicketModel
+from .OutboundRecordModel import OutboundRecordModel
+from .AccountRecordModel import AccountRecordModel
+from .ContactRecordModel import ContactRecordModel
+from .TransactionRecordModel import TransactionRecordModel
 
 __all__ = [
     "SessionModel",
@@ -20,4 +24,8 @@ __all__ = [
     "RoleModel",
     "GoalModel",
     "TicketModel",
+    "OutboundRecordModel",
+    "AccountRecordModel",
+    "ContactRecordModel",
+    "TransactionRecordModel",
 ]
