@@ -72,6 +72,6 @@ ui.run(
     title="NDLytics",
     port=8000,
     host="0.0.0.0",
-    show=True,
+    show=False,
     reload=True,
 )

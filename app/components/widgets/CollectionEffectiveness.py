@@ -5,6 +5,7 @@ import numpy as np
 from collections import defaultdict
 import json
 from .WidgetFramework import WidgetFramework
+from modules import ListManager
 
 
 class CollectionEffectivenessWidget(WidgetFramework):
@@ -29,24 +30,20 @@ class CollectionEffectivenessWidget(WidgetFramework):
     def _calculate_metrics(self):
         metrics = {}
 
-        # Calculate metrics for each status group
-        for group_name, statuses in self.status_groups.items():
-            prefix = group_name.lower().replace(" ", "_")
-            group_metrics = self._calculate_group_metrics(statuses)
-            metrics.update(
-                {
-                    f"{prefix}_accounts": group_metrics["total_accounts"],
-                    f"{prefix}_payments": group_metrics["payments"],
-                    f"{prefix}_success_rate": group_metrics["success_rate"],
-                }
-            )
+        # Calculate metrics for each client
+        contacts_df = self.get_contacts()
+        # Clean client numbers first
+        contacts_df["client_number"] = contacts_df["client_number"].apply(
+            lambda x: str(x).split(".")[0] if pd.notna(x) else None
+        )
 
-        # Calculate status transitions
-        transitions = self._calculate_status_transitions()
-        metrics["status_transitions"] = transitions
+        # Debug logging
 
-        # Calculate strategy success
-        metrics["strategy_success"] = self._calculate_strategy_success()
+        for client in contacts_df["client_number"].dropna().unique():
+            client_metrics = self._calculate_client_metrics(client)
+            metrics[client] = client_metrics  # Store with original client number
+
+        # Debug logging
 
         # Add timestamp
         metrics["last_modified"] = int(datetime.now().timestamp())
@@ -54,40 +51,49 @@ class CollectionEffectivenessWidget(WidgetFramework):
         # Update cache
         self.update_metric_cache(metrics)
 
-    def _calculate_group_metrics(self, statuses):
+    def _calculate_client_metrics(self, client):
         contacts_df = self.get_contacts()
-        transactions_df = self.get_transactions()
+        # Clean client numbers in contacts_df
+        contacts_df["client_number"] = contacts_df["client_number"].apply(
+            lambda x: str(x).split(".")[0] if pd.notna(x) else None
+        )
 
-        accounts_in_status = contacts_df[contacts_df["account_status"].isin(statuses)][
+        # Filter using clean client number
+        client_accounts = contacts_df[contacts_df["client_number"] == str(client)][
             "file_number"
         ].unique()
 
-        if len(accounts_in_status) == 0:
-            return {"total_accounts": 0, "payments": 0, "success_rate": 0}
-
-        account_payments = transactions_df[
-            transactions_df["file_number"].isin(accounts_in_status)
+        # Filter data for client
+        client_contacts = contacts_df[contacts_df["file_number"].isin(client_accounts)]
+        client_transactions = self.get_transactions()[
+            self.get_transactions()["file_number"].isin(client_accounts)
         ]
 
-        total_payments = account_payments["payment_amount"].sum()
-        accounts_with_payments = account_payments[
-            account_payments["payment_amount"] > 0
-        ]["file_number"].nunique()
-
-        success_rate = (
-            accounts_with_payments / len(accounts_in_status)
-            if len(accounts_in_status) > 0
-            else 0
+        # Calculate metrics specific to this client
+        strategy_success = self._calculate_strategy_success(
+            client_contacts, client_transactions
         )
+        status_transitions = self._calculate_status_transitions(client_contacts)
 
-        return {
-            "total_accounts": len(accounts_in_status),
-            "payments": float(total_payments),
-            "success_rate": float(success_rate),
+        # Store transaction data for performance and patterns tabs
+        transaction_metrics = {
+            "payment_data": client_transactions[
+                client_transactions["payment_amount"] > 0
+            ].to_dict(orient="records"),
+            "total_payments": len(
+                client_transactions[client_transactions["payment_amount"] > 0]
+            ),
+            "total_amount": float(client_transactions["payment_amount"].sum()),
+            "unique_accounts": len(client_transactions["file_number"].unique()),
         }
 
-    def _calculate_status_transitions(self):
-        contacts_df = self.get_contacts()
+        return {
+            "strategy_success": strategy_success,
+            "status_transitions": status_transitions,
+            "transaction_metrics": transaction_metrics,
+        }
+
+    def _calculate_status_transitions(self, contacts_df):
         transitions = defaultdict(int)
 
         sorted_comments = contacts_df.sort_values("created_date")
@@ -105,9 +111,7 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
         return dict(transitions)
 
-    def _calculate_strategy_success(self):
-        contacts_df = self.get_contacts()
-        transactions_df = self.get_transactions()
+    def _calculate_strategy_success(self, contacts_df, transactions_df):
         success_rates = {}
 
         valid_transactions = transactions_df[transactions_df["payment_amount"] > 0]
@@ -170,30 +174,78 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
     def render(self):
         metrics = self.get_cached()
+        print("Cached metrics keys:", metrics.keys())  # Debug log
+
+        # Get unique clients from contacts data and handle None values
+        contacts_df = self.get_contacts()
+        contacts_df["client_number"] = contacts_df["client_number"].astype(str)
+        client_numbers = contacts_df["client_number"].dropna().unique()
+        client_numbers = [c.split(".")[0] for c in client_numbers if c != "nan"]
+        client_numbers = sorted(client_numbers)
+
+        selected_client = client_numbers[0] if client_numbers else None
+
+        # Initialize list manager and get client mappings
+        list_manager = ListManager()
+        client_map = list_manager.get_list("client_map")
 
         with ui.card().classes("w-full p-6"):
             ui.label("Collection Effectiveness Analysis").classes(
                 "text-2xl font-bold mb-4"
             )
 
+            # Add client selector with mapped names
+            def on_select(e):
+                nonlocal selected_client
+                selected_client = e.value
+                content.refresh(selected_client)
+
+            ui.select(
+                options={
+                    c: client_map.get(
+                        c, f"Client {c}"
+                    )  # Use clean client number directly
+                    for c in client_numbers
+                },
+                value=selected_client,
+                label="Select Client",
+                on_change=on_select,
+            ).classes("w-full mb-4")
+
             with ui.tabs().classes("w-full") as tabs:
                 strategy_tab = ui.tab("Strategy Effectiveness")
                 performance_tab = ui.tab("Collection Performance")
                 patterns_tab = ui.tab("Payment Patterns")
 
-            with ui.tab_panels(tabs, value=strategy_tab).classes("w-full mt-4"):
-                with ui.tab_panel(strategy_tab):
-                    self._render_strategy_effectiveness(metrics)
-                with ui.tab_panel(performance_tab):
-                    self._render_collection_performance(metrics)
-                with ui.tab_panel(patterns_tab):
-                    self._render_payment_patterns(metrics)
+            @ui.refreshable
+            def content(selected_client):
+                with ui.tab_panels(tabs, value=strategy_tab).classes("w-full mt-4"):
+                    with ui.tab_panel(strategy_tab):
+                        self._render_strategy_effectiveness(metrics, selected_client)
+                    with ui.tab_panel(performance_tab):
+                        self._render_collection_performance(metrics, selected_client)
+                    with ui.tab_panel(patterns_tab):
+                        self._render_payment_patterns(metrics, selected_client)
 
-    def _render_strategy_effectiveness(self, metrics):
+            content(selected_client)
+
+    def _render_strategy_effectiveness(self, metrics, selected_client):
         try:
-            if "strategy_success" in metrics:
+
+            if selected_client in metrics:  # Try direct match first
+                client_metrics = metrics[selected_client]
+            else:
+                with ui.card().classes("w-full p-4"):
+                    ui.label(f"No data available for client {selected_client}").classes(
+                        "text-lg"
+                    )
+                return
+
+            if "strategy_success" in client_metrics:
                 status_data = []
-                for status, status_metrics in metrics["strategy_success"].items():
+                for status, status_metrics in client_metrics[
+                    "strategy_success"
+                ].items():
                     if status_metrics["total_accounts"] > 0:
                         status_data.append(
                             {
@@ -261,12 +313,12 @@ class CollectionEffectivenessWidget(WidgetFramework):
                                     "total_payment_amount": 0.0,
                                     "accounts_with_payments": 0,
                                 }
-
+                                print(f"Statuses for {status_group}: {statuses}")
                                 for status in statuses:
-                                    if status in metrics["strategy_success"]:
-                                        status_metrics = metrics["strategy_success"][
-                                            status
-                                        ]
+                                    if status in client_metrics["strategy_success"]:
+                                        status_metrics = client_metrics[
+                                            "strategy_success"
+                                        ][status]
                                         group_metrics[
                                             "total_accounts"
                                         ] += status_metrics["total_accounts"]
@@ -302,67 +354,87 @@ class CollectionEffectivenessWidget(WidgetFramework):
                                     ui.label(f"Success Rate: {group_success_rate:.1f}%")
 
         except Exception as e:
-            print(f"Error rendering strategy effectiveness: {str(e)}")
             with ui.card().classes("w-full p-4"):
                 ui.label(
                     "No data available for strategy effectiveness analysis"
                 ).classes("text-lg")
 
-    def _render_collection_performance(self, metrics):
+    def _render_collection_performance(self, metrics, selected_client):
         try:
-            transactions_df = self.get_transactions()
 
-            if not transactions_df.empty:
-                # Create a copy and ensure proper data types
-                valid_payments = transactions_df[
-                    transactions_df["payment_amount"] > 0
-                ].copy()
+            if selected_client in metrics:
+                client_metrics = metrics[selected_client]
 
-                # Convert payment amount to numeric
-                valid_payments["payment_amount"] = pd.to_numeric(
-                    valid_payments["payment_amount"], errors="coerce"
+                transactions_df = self.get_transactions()
+                contacts_df = self.get_contacts()
+
+                # Clean file numbers in both dataframes - remove decimal points
+                contacts_df["file_number"] = contacts_df["file_number"].apply(
+                    lambda x: str(x).split(".")[0] if pd.notna(x) else None
+                )
+                transactions_df["file_number"] = transactions_df["file_number"].apply(
+                    lambda x: str(x).split(".")[0] if pd.notna(x) else None
                 )
 
-                # Handle date conversion
-                valid_payments["payment_year"] = valid_payments["payment_date_year"]
-                valid_payments["payment_month"] = valid_payments["payment_date_month"]
-                valid_payments["payment_month_str"] = valid_payments.apply(
-                    lambda x: f"{x['payment_year']}-{x['payment_month']:02d}", axis=1
+                # Clean client number and filter
+                contacts_df["client_number"] = contacts_df["client_number"].apply(
+                    lambda x: str(x).split(".")[0] if pd.notna(x) else None
                 )
 
-                if len(valid_payments) > 0:
-                    # Monthly payment analysis using the string month field
-                    monthly_stats = (
-                        valid_payments.groupby("payment_month_str")
-                        .agg(
-                            {
-                                "payment_amount": ["count", "sum", "mean"],
-                                "file_number": "nunique",
-                            }
+                # Filter for selected client
+                client_accounts = contacts_df[
+                    contacts_df["client_number"] == selected_client
+                ]["file_number"].unique()
+
+                # Filter transactions
+                transactions_df = transactions_df[
+                    transactions_df["file_number"].isin(client_accounts)
+                ]
+
+                if not transactions_df.empty:
+                    valid_payments = transactions_df[
+                        transactions_df["payment_amount"] > 0
+                    ].copy()
+
+                    if len(valid_payments) > 0:
+                        # Monthly payment analysis
+                        valid_payments["payment_year"] = valid_payments[
+                            "payment_date_year"
+                        ]
+                        valid_payments["payment_month"] = valid_payments[
+                            "payment_date_month"
+                        ]
+                        valid_payments["payment_month_str"] = valid_payments.apply(
+                            lambda x: f"{x['payment_year']}-{x['payment_month']:02d}",
+                            axis=1,
                         )
-                        .reset_index()
-                    )
 
-                    # Flatten column names
-                    monthly_stats.columns = [
-                        "month",
-                        "payment_count",
-                        "total_amount",
-                        "avg_payment",
-                        "unique_accounts",
-                    ]
+                        monthly_stats = (
+                            valid_payments.groupby("payment_month_str")
+                            .agg(
+                                {
+                                    "payment_amount": ["count", "sum", "mean"],
+                                    "file_number": "nunique",
+                                }
+                            )
+                            .reset_index()
+                        )
+                        monthly_stats.columns = [
+                            "month",
+                            "payment_count",
+                            "total_amount",
+                            "avg_payment",
+                            "unique_accounts",
+                        ]
+                        monthly_stats = monthly_stats.sort_values("month")
 
-                    # Sort by month to ensure chronological order
-                    monthly_stats = monthly_stats.sort_values("month")
-
-                    if len(monthly_stats) > 0:
-                        # Create monthly performance chart
+                        # Create performance chart
                         performance_chart = {
                             "chart": {"type": "column"},
                             "title": {"text": "Monthly Collection Performance"},
                             "xAxis": {
                                 "categories": monthly_stats["month"].tolist(),
-                                "title": {"text": "Month"},
+                                "labels": {"rotation": -45},
                             },
                             "yAxis": [
                                 {
@@ -391,9 +463,8 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
                         ui.highchart(performance_chart).classes("w-full h-64")
 
-                        # Add performance metrics cards
+                        # Add summary metrics
                         with ui.grid(columns=3).classes("w-full gap-6 mt-6"):
-                            # Overall Performance
                             with ui.card().classes("p-4"):
                                 ui.label("Overall Performance").classes(
                                     "text-lg font-bold mb-2"
@@ -409,249 +480,211 @@ class CollectionEffectivenessWidget(WidgetFramework):
                                     ui.label(f"Total Payments: {len(valid_payments):,}")
                                     ui.label(f"Unique Accounts: {unique_accounts:,}")
                                     ui.label(f"Average Payment: ${avg_payment:,.2f}")
-
-                            # Payment Size Distribution
-                            with ui.card().classes("p-4"):
-                                ui.label("Payment Size Distribution").classes(
-                                    "text-lg font-bold mb-2"
-                                )
-                                payment_ranges = [
-                                    (0, 100),
-                                    (100, 500),
-                                    (500, 1000),
-                                    (1000, 5000),
-                                    (5000, float("inf")),
-                                ]
-                                with ui.column().classes("gap-2"):
-                                    for low, high in payment_ranges:
-                                        mask = valid_payments["payment_amount"] > low
-                                        if high != float("inf"):
-                                            mask &= (
-                                                valid_payments["payment_amount"] <= high
-                                            )
-                                        count = len(valid_payments[mask])
-                                        range_text = (
-                                            f"${low:,} - ${high:,}"
-                                            if high != float("inf")
-                                            else f"${low:,}+"
-                                        )
-                                        ui.label(f"{range_text}: {count:,} payments")
-
-                            # Recent Activity
-                            with ui.card().classes("p-4"):
-                                ui.label("Recent Activity").classes(
-                                    "text-lg font-bold mb-2"
-                                )
-                                with ui.column().classes("gap-2"):
-                                    if len(monthly_stats) >= 2:
-                                        current = monthly_stats.iloc[-1]
-                                        previous = monthly_stats.iloc[-2]
-
-                                        if (
-                                            previous["total_amount"] > 0
-                                            and previous["payment_count"] > 0
-                                        ):
-                                            amount_change = (
-                                                (
-                                                    current["total_amount"]
-                                                    / previous["total_amount"]
-                                                )
-                                                - 1
-                                            ) * 100
-                                            count_change = (
-                                                (
-                                                    current["payment_count"]
-                                                    / previous["payment_count"]
-                                                )
-                                                - 1
-                                            ) * 100
-
-                                            ui.label(
-                                                f"Amount Change: {amount_change:+.1f}%"
-                                            )
-                                            ui.label(
-                                                f"Count Change: {count_change:+.1f}%"
-                                            )
-
-                                    latest = monthly_stats.iloc[-1]
-                                    ui.label("Current Month:")
-                                    ui.label(
-                                        f"Collections: ${latest['total_amount']:,.2f}"
-                                    )
-                                    ui.label(
-                                        f"Active Accounts: {latest['unique_accounts']:,}"
-                                    )
                     else:
                         with ui.card().classes("w-full p-4"):
-                            ui.label("No monthly statistics available").classes(
-                                "text-lg"
-                            )
+                            ui.label("No valid payments found").classes("text-lg")
                 else:
+                    print("No transactions found after filtering")
                     with ui.card().classes("w-full p-4"):
-                        ui.label("No valid payments found").classes("text-lg")
+                        ui.label("No transaction data available").classes("text-lg")
             else:
+                print(f"Client {selected_client} not found in metrics")
                 with ui.card().classes("w-full p-4"):
-                    ui.label("No transaction data available").classes("text-lg")
+                    ui.label(f"No data available for client {selected_client}").classes(
+                        "text-lg"
+                    )
 
         except Exception as e:
-            print(f"Error rendering collection performance: {str(e)}")
-            import traceback
 
-            print(traceback.format_exc())
             with ui.card().classes("w-full p-4"):
                 ui.label("Error processing collection performance data").classes(
                     "text-lg"
                 )
 
-    def _render_payment_patterns(self, metrics):
+    def _render_payment_patterns(self, metrics, selected_client):
         try:
-            transactions_df = self.get_transactions()
 
-            if not transactions_df.empty:
-                valid_payments = transactions_df[
-                    transactions_df["payment_amount"] > 0
-                ].copy()
-                valid_payments["payment_amount"] = pd.to_numeric(
-                    valid_payments["payment_amount"], errors="coerce"
+            if selected_client in metrics:
+                client_metrics = metrics[selected_client]
+
+                transactions_df = self.get_transactions()
+                contacts_df = self.get_contacts()
+
+                # Clean client number and filter
+                contacts_df["client_number"] = contacts_df["client_number"].apply(
+                    lambda x: str(x).split(".")[0] if pd.notna(x) else None
                 )
 
-                if len(valid_payments) > 0:
-                    # Day of Week Analysis
-                    valid_payments["day_of_week"] = (
-                        pd.to_numeric(valid_payments["payment_date_day"]) % 7
-                    )
-                    day_names = [
-                        "Sunday",
-                        "Monday",
-                        "Tuesday",
-                        "Wednesday",
-                        "Thursday",
-                        "Friday",
-                        "Saturday",
-                    ]
-                    daily_stats = (
-                        valid_payments.groupby("day_of_week")
-                        .agg({"payment_amount": ["count", "sum", "mean"]})
-                        .reset_index()
-                    )
-                    daily_stats.columns = [
-                        "day_of_week",
-                        "payment_count",
-                        "total_amount",
-                        "avg_payment",
-                    ]
+                # Filter for selected client
+                client_accounts = contacts_df[
+                    contacts_df["client_number"] == selected_client
+                ]["file_number"].unique()
 
-                    # Create daily pattern chart
-                    daily_chart = {
-                        "chart": {"type": "column"},
-                        "title": {"text": "Payment Patterns by Day of Week"},
-                        "xAxis": {
-                            "categories": [
-                                day_names[int(d)] for d in daily_stats["day_of_week"]
+                transactions_df = transactions_df[
+                    transactions_df["file_number"].isin(client_accounts)
+                ]
+
+                if not transactions_df.empty:
+                    valid_payments = transactions_df[
+                        transactions_df["payment_amount"] > 0
+                    ].copy()
+
+                    if len(valid_payments) > 0:
+                        # Day of Week Analysis
+                        valid_payments["day_of_week"] = (
+                            pd.to_numeric(valid_payments["payment_date_day"]) % 7
+                        )
+                        day_names = [
+                            "Sunday",
+                            "Monday",
+                            "Tuesday",
+                            "Wednesday",
+                            "Thursday",
+                            "Friday",
+                            "Saturday",
+                        ]
+                        daily_stats = (
+                            valid_payments.groupby("day_of_week")
+                            .agg({"payment_amount": ["count", "sum", "mean"]})
+                            .reset_index()
+                        )
+                        daily_stats.columns = [
+                            "day_of_week",
+                            "payment_count",
+                            "total_amount",
+                            "avg_payment",
+                        ]
+
+                        # Create daily pattern chart
+                        daily_chart = {
+                            "chart": {"type": "column"},
+                            "title": {"text": "Payment Patterns by Day of Week"},
+                            "xAxis": {
+                                "categories": [
+                                    day_names[int(d)]
+                                    for d in daily_stats["day_of_week"]
+                                ],
+                                "title": {"text": "Day of Week"},
+                            },
+                            "yAxis": [
+                                {
+                                    "title": {"text": "Amount ($)"},
+                                    "labels": {"format": "${value:,.0f}"},
+                                },
+                                {
+                                    "title": {"text": "Number of Payments"},
+                                    "opposite": True,
+                                },
                             ],
-                            "title": {"text": "Day of Week"},
-                        },
-                        "yAxis": [
-                            {
-                                "title": {"text": "Amount ($)"},
-                                "labels": {"format": "${value:,.0f}"},
-                            },
-                            {"title": {"text": "Number of Payments"}, "opposite": True},
-                        ],
-                        "series": [
-                            {
-                                "name": "Total Amount",
-                                "type": "column",
-                                "yAxis": 0,
-                                "data": daily_stats["total_amount"].round(2).tolist(),
-                            },
-                            {
-                                "name": "Payment Count",
-                                "type": "line",
-                                "yAxis": 1,
-                                "data": daily_stats["payment_count"].tolist(),
-                            },
-                        ],
-                    }
+                            "series": [
+                                {
+                                    "name": "Total Amount",
+                                    "type": "column",
+                                    "yAxis": 0,
+                                    "data": daily_stats["total_amount"]
+                                    .round(2)
+                                    .tolist(),
+                                },
+                                {
+                                    "name": "Payment Count",
+                                    "type": "line",
+                                    "yAxis": 1,
+                                    "data": daily_stats["payment_count"].tolist(),
+                                },
+                            ],
+                        }
 
-                    ui.highchart(daily_chart).classes("w-full h-64")
+                        ui.highchart(daily_chart).classes("w-full h-64")
 
-                    # Add pattern analysis cards
-                    with ui.grid(columns=3).classes("w-full gap-6 mt-6"):
-                        # Payment Frequency
-                        with ui.card().classes("p-4"):
-                            ui.label("Payment Frequency").classes(
-                                "text-lg font-bold mb-2"
-                            )
-                            account_payments = valid_payments.groupby(
-                                "file_number"
-                            ).size()
-                            with ui.column().classes("gap-2"):
-                                ui.label(
-                                    f"Single Payment Accounts: {len(account_payments[account_payments == 1]):,}"
+                        # Add pattern analysis cards
+                        with ui.grid(columns=3).classes("w-full gap-6 mt-6"):
+                            # Payment Frequency
+                            with ui.card().classes("p-4"):
+                                ui.label("Payment Frequency").classes(
+                                    "text-lg font-bold mb-2"
                                 )
-                                ui.label(
-                                    f"Multiple Payment Accounts: {len(account_payments[account_payments > 1]):,}"
-                                )
-                                ui.label(
-                                    f"High Activity Accounts (5+): {len(account_payments[account_payments >= 5]):,}"
-                                )
-                                ui.label(
-                                    f"Max Payments per Account: {account_payments.max():,}"
-                                )
+                                account_payments = valid_payments.groupby(
+                                    "file_number"
+                                ).size()
+                                with ui.column().classes("gap-2"):
+                                    ui.label(
+                                        f"Single Payment Accounts: {len(account_payments[account_payments == 1]):,}"
+                                    )
+                                    ui.label(
+                                        f"Multiple Payment Accounts: {len(account_payments[account_payments > 1]):,}"
+                                    )
+                                    ui.label(
+                                        f"High Activity Accounts (5+): {len(account_payments[account_payments >= 5]):,}"
+                                    )
+                                    ui.label(
+                                        f"Max Payments per Account: {account_payments.max():,}"
+                                    )
 
-                        # Payment Size Patterns
-                        with ui.card().classes("p-4"):
-                            ui.label("Payment Size Patterns").classes(
-                                "text-lg font-bold mb-2"
-                            )
-                            with ui.column().classes("gap-2"):
-                                percentiles = valid_payments["payment_amount"].quantile(
-                                    [0.25, 0.5, 0.75]
+                            # Payment Size Patterns
+                            with ui.card().classes("p-4"):
+                                ui.label("Payment Size Patterns").classes(
+                                    "text-lg font-bold mb-2"
                                 )
-                                ui.label(f"25th Percentile: ${percentiles[0.25]:,.2f}")
-                                ui.label(f"Median Payment: ${percentiles[0.5]:,.2f}")
-                                ui.label(f"75th Percentile: ${percentiles[0.75]:,.2f}")
-                                ui.label(
-                                    f"Payment Range: ${valid_payments['payment_amount'].min():,.2f} - ${valid_payments['payment_amount'].max():,.2f}"
-                                )
+                                with ui.column().classes("gap-2"):
+                                    percentiles = valid_payments[
+                                        "payment_amount"
+                                    ].quantile([0.25, 0.5, 0.75])
+                                    ui.label(
+                                        f"25th Percentile: ${percentiles[0.25]:,.2f}"
+                                    )
+                                    ui.label(
+                                        f"Median Payment: ${percentiles[0.5]:,.2f}"
+                                    )
+                                    ui.label(
+                                        f"75th Percentile: ${percentiles[0.75]:,.2f}"
+                                    )
+                                    ui.label(
+                                        f"Payment Range: ${valid_payments['payment_amount'].min():,.2f} - ${valid_payments['payment_amount'].max():,.2f}"
+                                    )
 
-                        # Time-based Patterns
-                        with ui.card().classes("p-4"):
-                            ui.label("Time-based Patterns").classes(
-                                "text-lg font-bold mb-2"
-                            )
-                            with ui.column().classes("gap-2"):
-                                # Most active day
-                                busiest_day = daily_stats.loc[
-                                    daily_stats["payment_count"].idxmax()
-                                ]
-                                busiest_day_name = day_names[
-                                    int(busiest_day["day_of_week"])
-                                ]
-                                ui.label(f"Most Active Day: {busiest_day_name}")
-                                ui.label(
-                                    f"Payments: {int(busiest_day['payment_count']):,}"
+                            # Time-based Patterns
+                            with ui.card().classes("p-4"):
+                                ui.label("Time-based Patterns").classes(
+                                    "text-lg font-bold mb-2"
                                 )
-                                ui.label(
-                                    f"Average Amount: ${busiest_day['avg_payment']:,.2f}"
-                                )
+                                with ui.column().classes("gap-2"):
+                                    # Most active day
+                                    busiest_day = daily_stats.loc[
+                                        daily_stats["payment_count"].idxmax()
+                                    ]
+                                    busiest_day_name = day_names[
+                                        int(busiest_day["day_of_week"])
+                                    ]
+                                    ui.label(f"Most Active Day: {busiest_day_name}")
+                                    ui.label(
+                                        f"Payments: {int(busiest_day['payment_count']):,}"
+                                    )
+                                    ui.label(
+                                        f"Average Amount: ${busiest_day['avg_payment']:,.2f}"
+                                    )
 
-                                # Week vs Weekend
-                                weekend_mask = valid_payments["day_of_week"].isin(
-                                    [0, 6]
-                                )
-                                weekend_count = len(valid_payments[weekend_mask])
-                                weekday_count = len(valid_payments[~weekend_mask])
-                                ui.label(
-                                    f"Weekend/Weekday Ratio: {weekend_count/weekday_count:.2f}"
-                                )
+                                    # Week vs Weekend
+                                    weekend_mask = valid_payments["day_of_week"].isin(
+                                        [0, 6]
+                                    )
+                                    weekend_count = len(valid_payments[weekend_mask])
+                                    weekday_count = len(valid_payments[~weekend_mask])
+                                    ui.label(
+                                        f"Weekend/Weekday Ratio: {weekend_count/weekday_count:.2f}"
+                                    )
+                    else:
+                        with ui.card().classes("w-full p-4"):
+                            ui.label("No valid payments found").classes("text-lg")
                 else:
+                    print("No transactions found after filtering")
                     with ui.card().classes("w-full p-4"):
-                        ui.label("No valid payments found").classes("text-lg")
+                        ui.label("No transaction data available").classes("text-lg")
             else:
+                print(f"Client {selected_client} not found in metrics")
                 with ui.card().classes("w-full p-4"):
-                    ui.label("No transaction data available").classes("text-lg")
+                    ui.label(f"No data available for client {selected_client}").classes(
+                        "text-lg"
+                    )
 
         except Exception as e:
             print(f"Error rendering payment patterns: {str(e)}")
