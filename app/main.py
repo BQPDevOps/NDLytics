@@ -7,8 +7,44 @@ from pages import *
 
 import tracemalloc
 import os
+import atexit
+import signal
+import multiprocessing
 
 tracemalloc.start()
+
+
+def cleanup_resources():
+    # Clean up multiprocessing resources
+    for p in multiprocessing.active_children():
+        p.terminate()
+        p.join()  # Wait for process to terminate
+
+    # Clean up semaphores
+    try:
+        from multiprocessing import resource_tracker
+
+        if hasattr(resource_tracker, "_resource_tracker"):
+            tracker = resource_tracker._resource_tracker
+            if hasattr(tracker, "unregister"):
+                for resource in tracker._resources:
+                    try:
+                        tracker.unregister(resource[0], resource[1])
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    # Force garbage collection
+    import gc
+
+    gc.collect()
+
+
+# Register cleanup handlers
+atexit.register(cleanup_resources)
+signal.signal(signal.SIGTERM, lambda *args: cleanup_resources())
+signal.signal(signal.SIGINT, lambda *args: cleanup_resources())
 
 
 @ui.page("/")
@@ -30,11 +66,32 @@ def root_dashboard():
     return dashboard_page(session_manager)
 
 
+@ui.page("/reports")
+@permission_required("dashboard_view")
+def root_reports():
+    session_manager = SessionManager()
+    return reports_page(session_manager)
+
+
 @ui.page("/campaigns")
 @permission_required("dashboard_view")
 def root_campaigns():
     session_manager = SessionManager()
     return campaigns_page(session_manager)
+
+
+@ui.page("/intelidoc")
+@permission_required("dashboard_view")
+def root_intelidoc():
+    session_manager = SessionManager()
+    return intelidoc_page(session_manager)
+
+
+@ui.page("/resolutions")
+@permission_required("dashboard_view")
+def root_resolutions():
+    session_manager = SessionManager()
+    return resolutions_page(session_manager)
 
 
 @ui.page("/tasks")

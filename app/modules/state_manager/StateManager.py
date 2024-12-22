@@ -106,3 +106,27 @@ class StateManager:
     def clear(self) -> None:
         self._state.clear()
         self._state_counter = 0
+
+    def get(self, key, default=None):
+        """Get a value from state by key"""
+        return self._state.get(key, default)
+
+    def set(self, key, value):
+        """Set a value in state by key"""
+        self._state[key] = value
+        return self
+
+    def update(self, data):
+        """Update multiple state values at once"""
+        self._state.update(data)
+        return self
+
+    def delete(self, key):
+        """Delete a value from state by key"""
+        if key in self._state:
+            del self._state[key]
+        return self
+
+    def __getattr__(self, name):
+        """Allow accessing state values as attributes"""
+        return self._state.get(name)
