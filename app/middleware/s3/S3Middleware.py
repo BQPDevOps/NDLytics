@@ -151,9 +151,9 @@ class S3Middleware:
                 if "Contents" in page:
                     all_objects.extend(page["Contents"])
 
-            # Filter objects that match the pattern 'company/protected/data/uploads/'
+            # Filter objects that match the pattern 'company/protected/'
             filtered_objects = [
-                obj for obj in all_objects if "/protected/documents" in obj["Key"]
+                obj for obj in all_objects if "/protected/" in obj["Key"]
             ]
 
             # Sort the filtered objects by last modified date (most recent first)
