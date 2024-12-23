@@ -226,6 +226,40 @@ class S3Middleware:
             print(f"Unexpected error getting file content: {str(e)}")
             return None
 
+    def put_object(self, bucket_name, key, content):
+        """Put an object into S3"""
+        try:
+            self.s3_client.put_object(Bucket=bucket_name, Key=key, Body=content)
+            return True
+        except Exception as e:
+            print(f"Error putting object to S3: {e}")
+            return False
+
+    def delete_object(self, bucket_name, key):
+        """Delete an object from S3"""
+        try:
+            self.s3_client.delete_object(Bucket=bucket_name, Key=key)
+            return True
+        except Exception as e:
+            print(f"Error deleting object from S3: {e}")
+            return False
+
+    def move_object(self, bucket, source_key, dest_key):
+        """Move an object within the same bucket using copy_object"""
+        try:
+            # Copy the object to the new location
+            self.s3_client.copy_object(
+                Bucket=bucket,
+                CopySource={"Bucket": bucket, "Key": source_key},
+                Key=dest_key,
+            )
+            # Delete the original object
+            self.delete_object(bucket, source_key)
+            return True
+        except Exception as e:
+            print(f"Error moving object from {source_key} to {dest_key}: {e}")
+            return False
+
 
 def create_s3_middleware(company_id=None, user_uuid=None):
     return S3Middleware(company_id, user_uuid)

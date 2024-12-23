@@ -63,6 +63,190 @@ class ChatViewer:
         self.items = []
         self.root_level = True
         self.shared_state = shared_state
+        self.selected_items = set()
+        self._action_bar = None
+        self.rename_dialog = None
+
+    def handle_add_folder(self, folder_name):
+        """Create a new folder in the current path"""
+        new_folder_path = f"{self.current_path}{folder_name}/"
+        print(f"Creating new folder: {new_folder_path}")
+
+        # Create an empty file to represent the folder
+        self.s3.put_object(self.bucket, new_folder_path + ".keep", "")
+
+        # If we're at root level, create the required subfolders
+        if self.root_level:
+            print("Creating standard subfolders for client directory")
+            # Create protected folder
+            self.s3.put_object(self.bucket, new_folder_path + "protected/.keep", "")
+            # Create public folder
+            self.s3.put_object(self.bucket, new_folder_path + "public/.keep", "")
+            # Create private folder
+            self.s3.put_object(self.bucket, new_folder_path + "private/.keep", "")
+
+        # Refresh the file list
+        self.load_files()
+
+    def show_add_folder_dialog(self):
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Create New Folder").classes("text-xl font-bold mb-4")
+            folder_name = ui.input("Folder name").classes("w-full")
+
+            with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                ui.button("Cancel", on_click=dialog.close).props("flat")
+                ui.button(
+                    "Create",
+                    on_click=lambda: [
+                        self.handle_add_folder(folder_name.value),
+                        dialog.close(),
+                    ],
+                ).props("flat").classes("text-primary")
+        dialog.open()
+
+    def handle_rename_submit(self, old_path, new_name):
+        print(f"Renaming {old_path} to {new_name}")
+
+        # Determine if it's a folder or file
+        is_folder = old_path.endswith("/") or "/" not in old_path
+        old_name = old_path.rstrip("/")
+
+        # Create new path
+        if self.root_level:
+            # At root level, just use the new name
+            old_path = old_name  # Remove trailing slash for replacement
+            new_path = new_name
+        else:
+            # In subfolders, maintain the path structure
+            parent_path = "/".join(old_path.rstrip("/").split("/")[:-1])
+            old_path = old_path.rstrip("/")  # Remove trailing slash for replacement
+            new_path = f"{parent_path}/{new_name}"
+
+        print(f"New path will be: {new_path}")
+
+        if is_folder:
+            # Handle folder renaming
+            # Get all objects recursively using list_files to get full paths
+            all_files = self.s3.list_files(self.bucket, old_path, clean_prefixes=False)
+            print(f"Found {len(all_files)} files to copy")
+
+            # If at root level, create standard folders first
+            if self.root_level:
+                # Create standard subfolders
+                for subfolder in ["protected", "public", "private"]:
+                    subfolder_path = f"{new_path}/{subfolder}/"
+                    print(f"Creating subfolder: {subfolder_path}")
+                    self.s3.put_object(self.bucket, subfolder_path + ".keep", "")
+
+            # Move each file to new location
+            for file_path in all_files:
+                if file_path != old_path and not file_path.endswith(
+                    "/.keep"
+                ):  # Skip folder markers
+                    new_file_path = file_path.replace(
+                        old_path, new_path, 1
+                    )  # Only replace first occurrence
+                    print(f"Moving {file_path} to {new_file_path}")
+                    success = self.s3.move_object(self.bucket, file_path, new_file_path)
+                    if not success:
+                        print(f"Failed to move file: {file_path}")
+        else:
+            # Handle single file renaming
+            # Get the file content
+            content = self.s3.get_file_content(self.bucket, old_path)
+            if content:
+                # Create new file with the new name
+                print(f"Creating new file: {new_path}")
+                success = self.s3.put_object(self.bucket, new_path, content)
+                if success:
+                    # Delete the old file
+                    print(f"Deleting old file: {old_path}")
+                    self.s3.delete_object(self.bucket, old_path)
+                else:
+                    print(f"Failed to create new file: {new_path}")
+
+        # Refresh the file list
+        self.load_files()
+
+        # Clear selection
+        self.selected_items.clear()
+        self.render_action_bar.refresh()
+
+    def show_rename_dialog(self, item):
+        # Get just the filename/foldername without the path
+        name = item.rstrip("/").split("/")[-1]
+        # Determine if it's a file or folder
+        is_folder = item.endswith("/") or "/" not in item
+
+        with ui.dialog() as dialog, ui.card():
+            if is_folder:
+                ui.label("Rename Folder").classes("text-xl font-bold mb-4")
+            else:
+                ui.label("Rename File").classes("text-xl font-bold mb-4")
+                # For files, get the extension to preserve it
+                name_parts = name.rsplit(".", 1)
+                base_name = name_parts[0]
+                extension = name_parts[1] if len(name_parts) > 1 else ""
+
+                # Only allow editing the base name, keep the extension
+                new_name = ui.input("New name", value=base_name).classes("w-full")
+                ui.label(f".{extension}").classes("text-gray-500")
+
+                with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                    ui.button("Cancel", on_click=dialog.close).props("flat")
+                    ui.button(
+                        "Rename",
+                        on_click=lambda: [
+                            self.handle_rename_submit(
+                                item, f"{new_name.value}.{extension}"
+                            ),
+                            dialog.close(),
+                        ],
+                    ).props("flat").classes("text-primary")
+                dialog.open()
+                return
+
+            # For folders, allow editing the entire name
+            new_name = ui.input("New name", value=name).classes("w-full")
+
+            with ui.row().classes("w-full justify-end gap-2 mt-4"):
+                ui.button("Cancel", on_click=dialog.close).props("flat")
+                ui.button(
+                    "Rename",
+                    on_click=lambda: [
+                        self.handle_rename_submit(item, new_name.value),
+                        dialog.close(),
+                    ],
+                ).props("flat").classes("text-primary")
+        dialog.open()
+
+    def handle_edit_click(self, item, e):
+        print(f"Edit clicked for: {item}")  # Debug log
+
+        # Clear any previous selection
+        self.selected_items.clear()
+        # Add the new selection
+        self.selected_items.add(item)
+
+        print(f"Selected items: {len(self.selected_items)}")  # Debug log
+        self.show_rename_dialog(item)
+        self.render_action_bar.refresh()
+
+    @ui.refreshable
+    def render_action_bar(self):
+        print(
+            f"Rendering action bar. Selected items: {len(self.selected_items)}"
+        )  # Debug log
+        with ui.row().classes("w-full items-center justify-between"):
+            # Left side - Explorer label
+            with ui.row():
+                ui.label("Explorer").classes("text-lg font-medium text-primary")
+
+            # Right side - action buttons
+            with ui.row().classes("gap-2"):
+                ui.button(
+                    "Add", icon="add", on_click=self.show_add_folder_dialog
+                ).props("flat dense").classes("text-primary")
 
     def update_file_list(self):
         if not self.file_list:
@@ -76,23 +260,61 @@ class ChatViewer:
             for item in self.items:
                 if len(item) == 2:  # Directory or back button
                     name, is_dir = item
-                    with ui.item(
-                        on_click=lambda n=name, d=is_dir: self.handle_click((n, d))
-                    ).classes("cursor-pointer"):
-                        with ui.item_section().props("side"):
-                            ui.icon("folder").props("size=small").classes(
-                                "text-yellow-600"
-                            )
-                        with ui.item_section():
-                            ui.label(name).classes("font-semibold")
-                    ui.separator()
+                    if name == "../":  # Back navigation
+                        with ui.item(
+                            on_click=lambda n=name, d=is_dir: self.handle_click((n, d))
+                        ).classes("cursor-pointer"):
+                            with ui.item_section().props("side"):
+                                ui.icon("arrow_back").props("size=small").classes(
+                                    "text-gray-600"
+                                )
+                            with ui.item_section():
+                                ui.label("Back").classes("font-semibold text-gray-600")
+                        ui.separator()
+                    else:  # Regular directory
+                        with ui.item():
+                            with ui.item_section().props("side"):
+                                ui.button(
+                                    icon="edit",
+                                    on_click=lambda e, n=name: self.handle_edit_click(
+                                        n, e
+                                    ),
+                                ).props("flat dense").classes(
+                                    "text-primary"
+                                    if name in self.selected_items
+                                    else ""
+                                )
+                            with ui.item_section().props("side"):
+                                ui.icon("folder").props("size=small").classes(
+                                    "text-yellow-600"
+                                )
+                            with ui.item_section():
+                                ui.label(name).classes("font-semibold")
+                            with ui.item_section().props("top side"):
+                                ui.button(
+                                    "view",
+                                    icon="chevron_right",
+                                    on_click=lambda n=name, d=is_dir: self.handle_click(
+                                        (n, d)
+                                    ),
+                                ).props("flat dense").classes("text-primary")
+                        ui.separator()
                 else:  # File with metadata
                     name, _, metadata, file_path = item
                     if self.shared_state.in_debtor_folder:
                         # In debtor folder, make items clickable for preview
-                        with ui.item(
-                            on_click=lambda f=file_path: self.handle_file_click(f)
-                        ).classes("cursor-pointer"):
+                        with ui.item():
+                            with ui.item_section().props("side"):
+                                ui.button(
+                                    icon="edit",
+                                    on_click=lambda e, f=file_path: self.handle_edit_click(
+                                        f, e
+                                    ),
+                                ).props("flat dense").classes(
+                                    "text-primary"
+                                    if file_path in self.selected_items
+                                    else ""
+                                )
                             with ui.item_section().props("side"):
                                 ui.icon("description").props("size=small").classes(
                                     "text-green-600"
@@ -103,6 +325,13 @@ class ChatViewer:
                                     f"Size: {metadata.get('Size', 'Unknown')}, Modified: {metadata.get('LastModified', 'Unknown')}"
                                 ).classes("text-sm text-gray-500").props("caption")
                             with ui.item_section().props("top side"):
+                                ui.button(
+                                    "view",
+                                    icon="chevron_right",
+                                    on_click=lambda f=file_path: self.handle_file_click(
+                                        f
+                                    ),
+                                ).props("flat dense").classes("text-primary")
                                 ui.button(
                                     icon="download",
                                     on_click=lambda f=file_path: self.download_file(f),
@@ -111,6 +340,17 @@ class ChatViewer:
                         # Outside debtor folder, show only download button
                         with ui.item():
                             with ui.item_section().props("side"):
+                                ui.button(
+                                    icon="edit",
+                                    on_click=lambda e, f=file_path: self.handle_edit_click(
+                                        f, e
+                                    ),
+                                ).props("flat dense").classes(
+                                    "text-primary"
+                                    if file_path in self.selected_items
+                                    else ""
+                                )
+                            with ui.item_section().props("side"):
                                 ui.icon("description").props("size=small").classes(
                                     "text-green-600"
                                 )
@@ -124,7 +364,7 @@ class ChatViewer:
                                     icon="download",
                                     on_click=lambda f=file_path: self.download_file(f),
                                 ).props("flat dense round").classes("text-primary")
-                    ui.separator()
+                        ui.separator()
 
     def handle_file_click(self, file_path):
         """Handle file click in debtor folder"""
@@ -214,11 +454,16 @@ class ChatViewer:
         with ui.column().classes("w-full h-full p-4"):
             with ui.card().classes("w-full h-full rounded-lg overflow-hidden"):
                 # Fixed header
-                with ui.column().classes("w-full"):
-                    ui.item_label(f"File Explorer - {self.current_path or '/'}").props(
-                        "header"
-                    ).classes("text-bold text-lg p-4")
-                    ui.separator()
+                with ui.column().classes("w-full p-4"):
+                    # Action bar
+                    with ui.card().classes("w-full p-2 rounded-lg").style(
+                        """
+                        background-color: #FFFFFF;
+                        border: 1px solid rgba(88,152,212,0.3);
+                        box-shadow: 0 0 0 1px rgba(88,152,212,0.2);
+                        """
+                    ):
+                        self._action_bar = self.render_action_bar()
 
                 # Scrollable content
                 with ui.scroll_area().classes("w-full flex-grow"):
