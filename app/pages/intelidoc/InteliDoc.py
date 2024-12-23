@@ -248,7 +248,7 @@ class ChatViewer:
                                     on_click=lambda e, n=name: self.handle_edit_click(
                                         n, e
                                     ),
-                                ).props("flat dense").classes(
+                                ).props("outline round size=md dense").classes(
                                     "text-primary"
                                     if name in self.selected_items
                                     else ""
@@ -279,7 +279,7 @@ class ChatViewer:
                                     on_click=lambda e, f=file_path: self.handle_edit_click(
                                         f, e
                                     ),
-                                ).props("flat dense").classes(
+                                ).props("outline round size=md dense").classes(
                                     "text-primary"
                                     if file_path in self.selected_items
                                     else ""
