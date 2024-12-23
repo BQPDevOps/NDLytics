@@ -173,40 +173,9 @@ class ChatViewer:
         self.render_action_bar.refresh()
 
     def show_rename_dialog(self, item):
-        # Get just the filename/foldername without the path
-        name = item.rstrip("/").split("/")[-1]
-        # Determine if it's a file or folder
-        is_folder = item.endswith("/") or "/" not in item
-
         with ui.dialog() as dialog, ui.card():
-            if is_folder:
-                ui.label("Rename Folder").classes("text-xl font-bold mb-4")
-            else:
-                ui.label("Rename File").classes("text-xl font-bold mb-4")
-                # For files, get the extension to preserve it
-                name_parts = name.rsplit(".", 1)
-                base_name = name_parts[0]
-                extension = name_parts[1] if len(name_parts) > 1 else ""
-
-                # Only allow editing the base name, keep the extension
-                new_name = ui.input("New name", value=base_name).classes("w-full")
-                ui.label(f".{extension}").classes("text-gray-500")
-
-                with ui.row().classes("w-full justify-end gap-2 mt-4"):
-                    ui.button("Cancel", on_click=dialog.close).props("flat")
-                    ui.button(
-                        "Rename",
-                        on_click=lambda: [
-                            self.handle_rename_submit(
-                                item, f"{new_name.value}.{extension}"
-                            ),
-                            dialog.close(),
-                        ],
-                    ).props("flat").classes("text-primary")
-                dialog.open()
-                return
-
-            # For folders, allow editing the entire name
+            ui.label("Rename Item").classes("text-xl font-bold mb-4")
+            name = item.rstrip("/").split("/")[-1]
             new_name = ui.input("New name", value=name).classes("w-full")
 
             with ui.row().classes("w-full justify-end gap-2 mt-4"):
