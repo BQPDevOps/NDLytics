@@ -65,19 +65,57 @@ class TasksComponent:
         attributes = self.cognito_middleware.get_all_custom_attributes(user_data.sub)
         return attributes
 
+    def _get_users(self):
+        users = self.cognito_middleware.get_users()
+        formatted_users = {}
+        for user in users:
+            attributes = {
+                attr["Name"]: attr["Value"] for attr in user.get("Attributes", [])
+            }
+            if "given_name" in attributes and "family_name" in attributes:
+                user_id = user["Username"]
+                name = f"{attributes['given_name']} {attributes['family_name'][0]}"
+                formatted_users[user_id] = name
+        return formatted_users
+
     def _get_tasks(self):
         user_id = self.cognito_middleware.get_user_id()
 
-        # Create expression for querying by user_id
-        expression_values = {":uid": {"S": user_id}}
-
-        # Get tasks for current user
-        response = self.dynamo_middleware.scan(
+        # Get user's own tasks
+        own_tasks_expression = {":uid": {"S": user_id}}
+        own_tasks_response = self.dynamo_middleware.scan(
             filter_expression="user_id = :uid",
-            expression_attribute_values=expression_values,
+            expression_attribute_values=own_tasks_expression,
         )
 
-        return response["Items"] if "Items" in response else []
+        # Get tasks where user is tagged
+        tagged_tasks_expression = {":uid": {"S": user_id}}
+        tagged_tasks_response = self.dynamo_middleware.scan(
+            filter_expression="contains(task_tags, :uid)",
+            expression_attribute_values=tagged_tasks_expression,
+        )
+
+        # Combine and deduplicate tasks
+        all_tasks = []
+        seen_task_ids = set()
+
+        # Add own tasks
+        if "Items" in own_tasks_response:
+            for task in own_tasks_response["Items"]:
+                task_id = task["task_id"]["S"]
+                if task_id not in seen_task_ids:
+                    all_tasks.append(task)
+                    seen_task_ids.add(task_id)
+
+        # Add tagged tasks
+        if "Items" in tagged_tasks_response:
+            for task in tagged_tasks_response["Items"]:
+                task_id = task["task_id"]["S"]
+                if task_id not in seen_task_ids:
+                    all_tasks.append(task)
+                    seen_task_ids.add(task_id)
+
+        return all_tasks
 
     @ui.refreshable
     def render_tasks_list(self, tasks_data, is_today=True):
@@ -324,21 +362,35 @@ class TasksComponent:
                         "height:100%;width:100%;"
                     )
 
-                with ui.row().classes("w-full flex justify-end flex-row"):
-                    ui.button("Cancel", on_click=dialog.close).props("flat")
-                    ui.button(
-                        "Add",
-                        on_click=lambda: self._add_task(
-                            dialog,
-                            task_name.value,
-                            priority.value,
-                            date.value,
-                            description.value,
-                        ),
-                    ).props("flat")
+                with ui.row().classes("w-full flex justify-between items-center mt-4"):
+                    assigned_users = (
+                        ui.select(
+                            options=self._get_users(),
+                            with_input=True,
+                            multiple=True,
+                            label="Assign Users",
+                        )
+                        .props("outlined dense use-chips")
+                        .classes("w-[40%]")
+                    )
+                    with ui.row().classes("gap-2"):
+                        ui.button("Cancel", on_click=dialog.close).props("flat")
+                        ui.button(
+                            "Add",
+                            on_click=lambda: self._add_task(
+                                dialog,
+                                task_name.value,
+                                priority.value,
+                                date.value,
+                                description.value,
+                                assigned_users.value,
+                            ),
+                        ).props("flat")
                 dialog.open()
 
-    def _add_task(self, dialog, task_name, priority, due_date, description=""):
+    def _add_task(
+        self, dialog, task_name, priority, due_date, description="", assigned_users=[]
+    ):
         try:
             if not task_name:
                 ui.notify("Task name is required", type="warning")
@@ -358,6 +410,10 @@ class TasksComponent:
                 # If it's just a date string, append the time
                 due_date = f"{due_date} 00:00:00"
 
+            # If no users assigned, assign to creator
+            if not assigned_users:
+                assigned_users = [user_id]
+
             item = {
                 "task_id": {"S": str(uuid.uuid4())},
                 "user_id": {"S": user_id},
@@ -370,8 +426,9 @@ class TasksComponent:
                 "task_created_by": {"S": user_id},
                 "task_updated_on": {"S": current_time},
                 "task_updated_by": {"S": user_id},
-                "task_assigned_to": {"L": [{"S": user_id}]},  # Add task_assigned_to
-                "task_comments": {"L": []},  # Add empty comments list
+                "task_assigned_to": {"L": [{"S": user_id}]},
+                "task_comments": {"L": []},
+                "task_tags": {"L": [{"S": str(user_id)} for user_id in assigned_users]},
             }
 
             self.dynamo_middleware.put_item(item)
