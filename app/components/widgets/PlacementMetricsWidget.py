@@ -21,17 +21,9 @@ class PlacementMetricsWidget(WidgetFramework):
         # Verify data loaded from parent
         for dataset in self.required_datasets:
             df = self.data_store.get(dataset)
-            # if df is not None:
-            #     print(f"{dataset} shape: {df.shape}")
-
-        # Check cache status
-        # print(f"Cache exists: {bool(self.cached_metrics)}")
-        # print(f"Recalc needed: {self.is_recalc_needed()}")
 
         if self.is_recalc_needed() or self.force_refresh:
             self._calculate_metrics()
-        else:
-            print("Using cached metrics")
 
     def _get_client_name(self, client_number):
         """Helper to get client name from number with fallback"""

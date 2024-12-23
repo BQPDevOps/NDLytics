@@ -314,7 +314,7 @@ class TicketsComponent:
                         "absolute right-[-8rem] top-1/2 -translate-y-1/2"
                     )
                     with ui.row().classes("w-full justify-between"):
-                        ui.label(truncate_text(ticket["ticket_title"], 30)).style(
+                        ui.label(truncate_text(ticket["ticket_title"], 15)).style(
                             "font-size:1rem;font-weight:bold;color:#4A4A4A;"
                         )
                         ui.label(

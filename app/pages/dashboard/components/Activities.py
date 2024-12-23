@@ -47,7 +47,7 @@ class ActivitiesComponent:
             force_refresh=self.force_refresh
         )
         self.widgets["collection_effectiveness"] = (
-            create_collection_effectiveness_widget(force_refresh=self.force_refresh)
+            create_collection_effectiveness_widget(force_refresh=True)
         )
         self.widgets["client_metrics"] = create_client_metrics_widget(
             force_refresh=self.force_refresh

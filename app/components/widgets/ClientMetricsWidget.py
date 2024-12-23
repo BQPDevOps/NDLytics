@@ -13,13 +13,9 @@ class ClientMetricsWidget(WidgetFramework):
         # Verify data loaded from parent
         for dataset in self.required_datasets:
             df = self.data_store.get(dataset)
-            if df is not None:
-                print(f"{dataset} shape: {df.shape}")
 
         if self.is_recalc_needed() or self.force_refresh:
             self._calculate_metrics()
-        else:
-            print("Using cached metrics")
 
     def _safe_date_convert(self, row, prefix):
         """Safely convert date components to a datetime"""
