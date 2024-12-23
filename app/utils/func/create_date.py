@@ -2,46 +2,48 @@ from datetime import datetime
 from typing import Union
 
 
-def _infer_format(format_str: str) -> str:
-    # Convert human readable format to datetime format
-    format_map = {
-        "yyyy": "%Y",
-        "yy": "%y",
-        "mm": "%m",
-        "m": "%-m",
-        "dd": "%d",
-        "d": "%-d",
-    }
-
-    # Handle example date format
-    if any(c.isdigit() for c in format_str):
-        if "-" in format_str:
-            return "%Y-%m-%d"
-        elif "/" in format_str:
-            return "%m/%d/%Y"
-        return "%Y%m%d"
-
-    # Convert human format
-    format_str = format_str.lower()
-    for human_fmt, dt_fmt in format_map.items():
-        format_str = format_str.replace(human_fmt, dt_fmt)
-    return format_str
-
-
 def create_date(
     month: Union[int, str, float],
     day: Union[int, str, float],
     year: Union[int, str, float],
     format: str = "yyyy-mm-dd",
 ) -> str:
-    # Convert inputs to integers
-    month = int(float(month))
-    day = int(float(day))
-    year = int(float(year))
+    """
+    Create a date string from month, day, and year components.
 
-    # Create date object
-    date = datetime(year, month, day)
+    Args:
+        month: Month as integer, string, or float
+        day: Day as integer, string, or float
+        year: Year as integer, string, or float
+        format: Output format (yyyy-mm-dd, mm/dd/yyyy, or mm-dd-yyyy)
 
-    # Convert format string and return
-    dt_format = _infer_format(format)
-    return date.strftime(dt_format)
+    Returns:
+        Formatted date string
+    """
+    try:
+        # Convert inputs to integers
+        month = int(float(month))
+        day = int(float(day))
+        year = int(float(year))
+
+        # Validate date components
+        if month < 1 or month > 12 or day < 1 or day > 31 or year < 1900:
+            raise ValueError(
+                f"Invalid date components: month={month}, day={day}, year={year}"
+            )
+
+        # Create base date string with zero padding
+        if format.lower() == "yyyy-mm-dd":
+            return f"{year:04d}-{month:02d}-{day:02d}"
+        elif format.lower() == "mm/dd/yyyy":
+            return f"{month:02d}/{day:02d}/{year:04d}"
+        elif format.lower() == "mm-dd-yyyy":
+            return f"{month:02d}-{day:02d}-{year:04d}"
+        else:
+            # Default to ISO format
+            return f"{year:04d}-{month:02d}-{day:02d}"
+
+    except Exception as e:
+        raise ValueError(
+            f"Error creating date: {str(e)}. Values - Month: {month}, Day: {day}, Year: {year}"
+        )

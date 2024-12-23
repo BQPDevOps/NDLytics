@@ -1,6 +1,7 @@
 from nicegui import ui
 from modules import StyleManager, ThemeManager
 from components.widgets import *
+from .SkeletonContainer import SkeletonContainer
 
 
 class ActivitiesComponent:
@@ -14,7 +15,6 @@ class ActivitiesComponent:
         self._init_widgets()
 
     def _config(self):
-
         self.style_manager.set_styles(
             {
                 "activities_component": {
@@ -42,20 +42,21 @@ class ActivitiesComponent:
         )
 
     def _init_widgets(self):
-        # Initialize all widgets
-        self.widgets["collection_insights"] = create_collection_insights_widget(
-            force_refresh=self.force_refresh
-        )
-        self.widgets["portfolio_performance"] = create_portfolio_performance_widget(
-            force_refresh=self.force_refresh
-        )
-        self.widgets["collection_effectiveness"] = (
-            create_collection_effectiveness_widget(force_refresh=self.force_refresh)
-        )
+        widget_configs = {
+            "collection_insights": create_collection_insights_widget,
+            "portfolio_performance": create_portfolio_performance_widget,
+            "collection_effectiveness": create_collection_effectiveness_widget,
+            "metrics": create_mtd_metrics_widget,
+            "client_metrics": create_client_metrics_widget,
+            "placement_metrics": create_placement_metrics_widget,
+        }
+
+        for name, creator in widget_configs.items():
+            widget = creator(force_refresh=self.force_refresh)
+            self.widgets[name] = SkeletonContainer(name, widget)
 
     def refresh_activities(self):
         self.force_refresh = True
-        # Refresh the UI component
         self.render_activity_feed.refresh()
 
     def switch_view(self, view):
@@ -96,13 +97,21 @@ class ActivitiesComponent:
                 with ui.element("div").classes("strategy-container").style(
                     "width: 100%"
                 ):
-                    self.widgets["collection_effectiveness"].render()
+                    for name in [
+                        "placement_metrics",
+                        "metrics",
+                        "collection_effectiveness",
+                    ]:
+                        with ui.element("div").classes("mb-4"):
+                            self.widgets[name].render()
 
             elif self.active_view == "performance":
                 with ui.element("div").classes("performance-container").style(
                     "width: 100%"
                 ):
-                    self.widgets["portfolio_performance"].render()
+                    for name in ["portfolio_performance", "client_metrics"]:
+                        with ui.element("div").classes("mb-4"):
+                            self.widgets[name].render()
 
             elif self.active_view == "insights":
                 with ui.element("div").classes("insights-container").style(

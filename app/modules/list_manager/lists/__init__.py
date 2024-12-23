@@ -117,6 +117,8 @@ application_lists = {
         "400012": "XL Funding LLC",
         "400045": "Fintap",
         "400046": "ICare",
+        "400047": "Wise Eyes Bookkeeping, LLC",
+        "400030": "DB3 - RAW03132024",
     },
     "operator_list": {
         "2115221": "MPP",

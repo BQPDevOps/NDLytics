@@ -19,6 +19,7 @@ class Config(BaseSettings):
     aws_users_table_name: str
     aws_settings_table_name: str
     aws_companies_table_name: str
+    aws_requests_table_name: str
 
     # AWS S3 STORAGE
     aws_nda_storage_bucket: str
@@ -44,6 +45,7 @@ class Config(BaseSettings):
     n8n_get_outbound_reporting_webhook: str
     n8n_write_to_csv_stopgap_webhook: str
     n8n_get_from_csv_stopgap_webhook: str
+    n8n_tcn_update_broadcast_webhook: str
 
     # FRAMEWORK
     app_storage_secret: str

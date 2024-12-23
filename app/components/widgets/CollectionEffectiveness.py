@@ -174,7 +174,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
     def render(self):
         metrics = self.get_cached()
-        print("Cached metrics keys:", metrics.keys())  # Debug log
 
         # Get unique clients from contacts data and handle None values
         contacts_df = self.get_contacts()
@@ -313,7 +312,7 @@ class CollectionEffectivenessWidget(WidgetFramework):
                                     "total_payment_amount": 0.0,
                                     "accounts_with_payments": 0,
                                 }
-                                print(f"Statuses for {status_group}: {statuses}")
+                                # print(f"Statuses for {status_group}: {statuses}")
                                 for status in statuses:
                                     if status in client_metrics["strategy_success"]:
                                         status_metrics = client_metrics[
