@@ -21,12 +21,12 @@ class PlacementMetricsWidget(WidgetFramework):
         # Verify data loaded from parent
         for dataset in self.required_datasets:
             df = self.data_store.get(dataset)
-            if df is not None:
-                print(f"{dataset} shape: {df.shape}")
+            # if df is not None:
+            #     print(f"{dataset} shape: {df.shape}")
 
         # Check cache status
-        print(f"Cache exists: {bool(self.cached_metrics)}")
-        print(f"Recalc needed: {self.is_recalc_needed()}")
+        # print(f"Cache exists: {bool(self.cached_metrics)}")
+        # print(f"Recalc needed: {self.is_recalc_needed()}")
 
         if self.is_recalc_needed() or self.force_refresh:
             self._calculate_metrics()
@@ -149,101 +149,130 @@ class PlacementMetricsWidget(WidgetFramework):
                     ui.label("Error rendering chart").classes("text-red-500")
 
                 # Render placement cards grouped by client
-                for client_num in sorted_clients:
-                    client_name = self._get_client_name(client_num)
-                    with ui.card().classes("w-full p-4 mt-6"):
-                        ui.label(f"{client_name} Placements").classes(
-                            "text-xl font-bold mb-4"
-                        )
+                with ui.column().classes(
+                    "w-full h-[36vh] border-light-blue-500 border-2 rounded-lg shadow-inset p-0.5rem"
+                ):
+                    with ui.scroll_area().style("width: 100%; height:100%;"):
+                        for client_num in sorted_clients:
+                            client_name = self._get_client_name(client_num)
+                            with ui.card().classes("w-full p-2 mt-1"):
+                                with ui.expansion(text=client_name).classes("w-full"):
+                                    with ui.grid(columns=1).classes("w-full gap-6"):
+                                        for placement in grouped_placements[client_num]:
+                                            try:
+                                                placement_date = pd.to_datetime(
+                                                    placement["placement_date"]
+                                                )
+                                                with ui.expansion(
+                                                    value=True,
+                                                    text=f"Placement - {placement_date.strftime('%Y-%m')}",
+                                                ).classes("w-full"):
+                                                    with ui.card().classes(
+                                                        "w-full p-4 border-light-blue-500 border-2 rounded-lg shadow-inset"
+                                                    ):
+                                                        ui.label(
+                                                            f"Placement - {placement_date.strftime('%Y-%m')}"
+                                                        ).classes(
+                                                            "text-md font-bold mb-2"
+                                                        )
 
-                        with ui.grid(columns=2).classes("w-full gap-6"):
-                            for placement in grouped_placements[client_num]:
-                                try:
-                                    placement_date = pd.to_datetime(
-                                        placement["placement_date"]
-                                    )
+                                                        with ui.grid(columns=3).classes(
+                                                            "gap-4"
+                                                        ):
+                                                            # Basic metrics
+                                                            with ui.column().classes(
+                                                                "gap-1 flex-1"
+                                                            ):
+                                                                ui.label(
+                                                                    "Basic Metrics"
+                                                                ).classes("font-bold")
 
-                                    with ui.card().classes("p-4"):
-                                        ui.label(
-                                            f"Placement - {placement_date.strftime('%Y-%m')}"
-                                        ).classes("text-lg font-bold mb-2")
+                                                                ui.label(
+                                                                    f"Account Count: {placement['account_count']}"
+                                                                )
+                                                                ui.label(
+                                                                    f"Paying Accounts: {placement['paying_accounts']}"
+                                                                )
 
-                                        with ui.grid(columns=2).classes("gap-4"):
-                                            # Basic metrics
-                                            with ui.column().classes("gap-2"):
-                                                ui.label("Basic Metrics").classes(
-                                                    "font-bold"
-                                                )
-                                                ui.label(
-                                                    f"Total Loaded: ${placement['total_loaded']:,.2f}"
-                                                )
-                                                ui.label(
-                                                    f"Total Collected: ${placement['total_collected']:,.2f}"
-                                                )
-                                                ui.label(
-                                                    f"Account Count: {placement['account_count']}"
-                                                )
-                                                ui.label(
-                                                    f"Paying Accounts: {placement['paying_accounts']}"
-                                                )
+                                                            with ui.column().classes(
+                                                                "gap-1 flex-1"
+                                                            ):
+                                                                ui.label(
+                                                                    "Financial Metrics"
+                                                                ).classes("font-bold")
+                                                                ui.label(
+                                                                    f"Total Loaded: ${placement['total_loaded']:,.2f}"
+                                                                )
+                                                                ui.label(
+                                                                    f"Total Collected: ${placement['total_collected']:,.2f}"
+                                                                )
 
-                                            # Performance metrics
-                                            with ui.column().classes("gap-2"):
-                                                ui.label("Performance Metrics").classes(
-                                                    "font-bold"
-                                                )
-                                                ui.label(
-                                                    f"Liquidation Rate: {placement['liquidation_rate']:.1f}%"
-                                                )
-                                                ui.label(
-                                                    f"Activation Rate: {placement['activation_rate']:.1f}%"
-                                                )
+                                                            # Performance metrics
+                                                            with ui.column().classes(
+                                                                "gap-1 flex-1"
+                                                            ):
+                                                                ui.label(
+                                                                    "Performance Metrics"
+                                                                ).classes("font-bold")
+                                                                ui.label(
+                                                                    f"Liquidation Rate: {placement['liquidation_rate']:.1f}%"
+                                                                )
+                                                                ui.label(
+                                                                    f"Activation Rate: {placement['activation_rate']:.1f}%"
+                                                                )
 
-                                        # Monthly collections chart
-                                        monthly_chart = {
-                                            "chart": {"type": "line"},
-                                            "title": {"text": "Monthly Collections"},
-                                            "xAxis": {
-                                                "categories": [
-                                                    f"Month {i+1}" for i in range(12)
-                                                ]
-                                            },
-                                            "yAxis": [
-                                                {
-                                                    "title": {"text": "Amount ($)"},
-                                                    "labels": {
-                                                        "format": "${value:,.0f}"
-                                                    },
-                                                },
-                                                {
-                                                    "title": {"text": "Velocity (%)"},
-                                                    "opposite": True,
-                                                },
-                                            ],
-                                            "series": [
-                                                {
-                                                    "name": "Collections",
-                                                    "data": placement[
-                                                        "monthly_collections"
-                                                    ],
-                                                },
-                                                {
-                                                    "name": "Velocity",
-                                                    "type": "line",
-                                                    "yAxis": 1,
-                                                    "data": placement[
-                                                        "collection_velocity"
-                                                    ],
-                                                },
-                                            ],
-                                        }
-                                        ui.highchart(monthly_chart).classes(
-                                            "w-full h-48 mt-4"
-                                        )
-                                except Exception as e:
-                                    ui.label("Error rendering placement card").classes(
-                                        "text-red-500"
-                                    )
+                                                        # Monthly collections chart
+                                                        monthly_chart = {
+                                                            "chart": {"type": "line"},
+                                                            "title": {
+                                                                "text": "Monthly Collections"
+                                                            },
+                                                            "xAxis": {
+                                                                "categories": [
+                                                                    f"Month {i+1}"
+                                                                    for i in range(12)
+                                                                ]
+                                                            },
+                                                            "yAxis": [
+                                                                {
+                                                                    "title": {
+                                                                        "text": "Amount ($)"
+                                                                    },
+                                                                    "labels": {
+                                                                        "format": "${value:,.0f}"
+                                                                    },
+                                                                },
+                                                                {
+                                                                    "title": {
+                                                                        "text": "Velocity (%)"
+                                                                    },
+                                                                    "opposite": True,
+                                                                },
+                                                            ],
+                                                            "series": [
+                                                                {
+                                                                    "name": "Collections",
+                                                                    "data": placement[
+                                                                        "monthly_collections"
+                                                                    ],
+                                                                },
+                                                                {
+                                                                    "name": "Velocity",
+                                                                    "type": "line",
+                                                                    "yAxis": 1,
+                                                                    "data": placement[
+                                                                        "collection_velocity"
+                                                                    ],
+                                                                },
+                                                            ],
+                                                        }
+                                                        ui.highchart(
+                                                            monthly_chart
+                                                        ).classes("w-full h-48 mt-4")
+                                            except Exception as e:
+                                                ui.label(
+                                                    "Error rendering placement card"
+                                                ).classes("text-red-500")
 
         except Exception as e:
             ui.label("Error rendering widget").classes("text-red-500")

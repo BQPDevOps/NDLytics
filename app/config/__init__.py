@@ -46,6 +46,8 @@ class Config(BaseSettings):
     n8n_write_to_csv_stopgap_webhook: str
     n8n_get_from_csv_stopgap_webhook: str
     n8n_tcn_update_broadcast_webhook: str
+    n8n_tcn_agent_status_webhook: str
+    n8n_tcn_create_contacts_and_schedule_calls_webhook: str
 
     # FRAMEWORK
     app_storage_secret: str
