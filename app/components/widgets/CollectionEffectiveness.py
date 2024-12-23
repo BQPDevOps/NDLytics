@@ -1,12 +1,9 @@
 from nicegui import ui
 import pandas as pd
-from datetime import datetime, timedelta
-import numpy as np
+from datetime import datetime
 from collections import defaultdict
-import json
 from .WidgetFramework import WidgetFramework
 from modules import ListManager
-from utils.func import create_date
 
 
 class CollectionEffectivenessWidget(WidgetFramework):
@@ -73,7 +70,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
             # Convert to float
             return float(amount_str) if amount_str else 0.0
         except Exception as e:
-            print(f"Error cleaning payment amount: {str(e)}, value: {amount}")
             return 0.0
 
     def _clean_numeric(self, value):
@@ -90,7 +86,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
     def _calculate_metrics(self):
         """Calculate all metrics and cache them"""
-        print("\n=== Starting metrics calculation ===")
         metrics = {}
 
         try:
@@ -120,8 +115,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
             )
             transactions_df = transactions_df.dropna(subset=["posted_date"])
 
-            print(f"Transactions after posted_date filter: {len(transactions_df)}")
-
             # Convert payment dates
             transactions_df["payment_date"] = transactions_df.apply(
                 lambda x: self._convert_date(x, "payment_date"), axis=1
@@ -129,28 +122,21 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
             # Process each client
             unique_clients = contacts_df["client_number"].dropna().unique()
-            print(f"\nProcessing {len(unique_clients)} clients: {unique_clients}")
 
             for client in unique_clients:
-                print(f"\n=== Processing client: {client} ===")
                 client_metrics = self._calculate_client_metrics(
                     client, contacts_df, transactions_df
                 )
                 metrics[client] = client_metrics
-                print(f"Completed metrics for client {client}")
 
             # Add timestamp
             metrics["last_modified"] = int(datetime.now().timestamp())
 
             # Update cache
             self.update_metric_cache(metrics)
-            print("\nMetrics calculation completed")
 
         except Exception as e:
             print(f"Error in _calculate_metrics: {str(e)}")
-            import traceback
-
-            print(traceback.format_exc())
 
     def _calculate_client_metrics(self, client, contacts_df, transactions_df):
         """Calculate metrics for a specific client"""
@@ -162,32 +148,18 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 transactions_df["file_number"].isin(client_accounts)
             ]
 
-            print(f"\nClient {client}:")
-            print(f"Number of accounts: {len(client_accounts)}")
-            print(f"Number of contacts: {len(client_contacts)}")
-            print(f"Number of transactions: {len(client_transactions)}")
-            print(f"Sample accounts: {client_accounts[:5]}")
-
             # Calculate strategy success
-            print("\nCalculating strategy success...")
             strategy_success = self._calculate_strategy_success(
                 client_contacts, client_transactions
             )
-            print(f"Strategy success results: {json.dumps(strategy_success, indent=2)}")
 
             # Calculate status transitions
-            print("\nCalculating status transitions...")
             status_transitions = self._calculate_status_transitions(client_contacts)
-            print(f"Status transitions: {json.dumps(status_transitions, indent=2)}")
 
             # Calculate transaction metrics
-            print("\nCalculating transaction metrics...")
             valid_payments = client_transactions[
                 client_transactions["payment_amount"] > 0
             ]
-            print(f"Valid payments: {len(valid_payments)}")
-            print(f"Payment amounts: {valid_payments['payment_amount'].tolist()}")
-
             transaction_metrics = {
                 "total_payments": len(valid_payments),
                 "total_amount": float(valid_payments["payment_amount"].sum()),
@@ -199,8 +171,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 ),
             }
 
-            print(f"Transaction metrics: {json.dumps(transaction_metrics, indent=2)}")
-
             return {
                 "strategy_success": strategy_success,
                 "status_transitions": status_transitions,
@@ -209,9 +179,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
         except Exception as e:
             print(f"Error in _calculate_client_metrics: {str(e)}")
-            import traceback
-
-            print(traceback.format_exc())
             return {
                 "strategy_success": {},
                 "status_transitions": {},
@@ -227,13 +194,11 @@ class CollectionEffectivenessWidget(WidgetFramework):
         """Calculate success rates for different strategies"""
         try:
             success_rates = {}
-            print("\n=== Strategy Success Calculation ===")
 
             # Filter for valid payment amounts first
             valid_transactions = transactions_df[
                 transactions_df["payment_amount"] > 0
             ].copy()
-            print(f"Valid transactions with payments: {len(valid_transactions)}")
 
             # Convert payment dates and filter invalid dates
             valid_transactions["payment_date"] = valid_transactions.apply(
@@ -242,8 +207,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
             valid_transactions = valid_transactions.dropna(subset=["payment_date"])
 
             for status, status_list in self.status_groups.items():
-                print(f"\nProcessing {status} group:")
-
                 # Get accounts for this status
                 status_contacts = contacts_df[
                     contacts_df["account_status"].isin(status_list)
@@ -266,12 +229,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
                     else 0.0
                 )
 
-                print(f"{status} metrics:")
-                print(f"Total accounts: {len(status_accounts)}")
-                print(f"Paying accounts: {len(paying_accounts)}")
-                print(f"Total payments: ${total_payment_amount:,.2f}")
-                print(f"Success rate: {success_rate:.2%}")
-
                 success_rates[status] = {
                     "total_accounts": int(len(status_accounts)),
                     "paying_accounts": int(len(paying_accounts)),
@@ -283,9 +240,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
         except Exception as e:
             print(f"Error in _calculate_strategy_success: {str(e)}")
-            import traceback
-
-            print(traceback.format_exc())
             return {}
 
     def _calculate_status_transitions(self, contacts_df):
@@ -373,17 +327,12 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
     def _render_strategy_effectiveness(self, client_metrics, selected_client):
         """Render strategy effectiveness analysis"""
-        print("\n=== Rendering Strategy Effectiveness ===")
         if "strategy_success" not in client_metrics:
-            print("No strategy_success in client_metrics")
             ui.label("No strategy data available").classes("text-lg")
             return
 
         strategy_data = []
         for status, metrics in client_metrics["strategy_success"].items():
-            print(f"\nProcessing status: {status}")
-            print(f"Metrics: {metrics}")
-
             if metrics["total_accounts"] > 0:
                 strategy_data.append(
                     {
@@ -396,12 +345,8 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 )
 
         if not strategy_data:
-            print("No strategy data after processing")
             ui.label("No strategy data available").classes("text-lg")
             return
-
-        print(f"\nFinal strategy data:")
-        print(json.dumps(strategy_data, indent=2))
 
         df = pd.DataFrame(strategy_data)
 
@@ -471,26 +416,20 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 self._clean_payment_amount
             )
 
-            print("\nStarting collection performance calculation")
-            print(f"Initial transactions: {len(transactions_df)}")
-
             # Get client accounts first
             client_accounts = contacts_df[
                 contacts_df["client_number"] == str(selected_client)
             ]["file_number"].unique()
-            print(f"Found {len(client_accounts)} client accounts")
 
             # Filter transactions first
             client_transactions = transactions_df[
                 transactions_df["file_number"].isin(client_accounts)
             ]
-            print(f"Client transactions: {len(client_transactions)}")
 
             # Filter for valid payments
             valid_payments = client_transactions[
                 client_transactions["payment_amount"] > 0
             ].copy()
-            print(f"Valid payments: {len(valid_payments)}")
 
             if valid_payments.empty:
                 ui.label("No payment data available").classes("text-lg")
@@ -501,16 +440,11 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 lambda x: self._convert_date(x, "payment_date"), axis=1
             )
             valid_payments = valid_payments.dropna(subset=["payment_date"])
-            print(f"Payments after date filtering: {len(valid_payments)}")
-            print(
-                f"Sample payment dates: {valid_payments['payment_date'].head().tolist()}"
-            )
 
             # Group by month
             valid_payments["month"] = pd.to_datetime(
                 valid_payments["payment_date"]
             ).dt.strftime("%Y-%m")
-            print(f"Unique months: {valid_payments['month'].unique().tolist()}")
 
             monthly_stats = (
                 valid_payments.groupby("month")
@@ -530,9 +464,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
                 "unique_accounts",
             ]
             monthly_stats = monthly_stats.sort_values("month")
-
-            print("\nMonthly stats:")
-            print(monthly_stats)
 
             # Create performance chart
             chart_data = {
@@ -586,9 +517,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
 
         except Exception as e:
             print(f"Error in collection performance: {str(e)}")
-            import traceback
-
-            print(traceback.format_exc())
             ui.label("Error processing collection performance data").classes("text-lg")
 
     def _render_payment_patterns(self, client_metrics, selected_client):
