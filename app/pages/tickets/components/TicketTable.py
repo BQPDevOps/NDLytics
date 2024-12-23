@@ -139,6 +139,7 @@ class TicketTableComponent:
             ticket_updated_by=user_id,
             ticket_assigned_to=[user_id],
             ticket_comments=[],
+            ticket_tags=[],
         )
 
         # Ensure all datetime fields are strings for DynamoDB
@@ -158,6 +159,7 @@ class TicketTableComponent:
                 "L": [{"S": str(user)} for user in task.ticket_assigned_to]
             },
             "ticket_comments": {"L": []},
+            "ticket_tags": {"L": []},
         }
 
         self.dynamo_middleware.put_item(item)

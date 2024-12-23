@@ -24,6 +24,7 @@ class NewTicketInput:
         self.priority: int = 1
         self.due_date: str = ""
         self.status: str = "pending"
+        self.assigned_users: list = []
 
     @property
     def is_valid(self):
@@ -86,6 +87,19 @@ class TicketsComponent:
                 self.dialog.close()
             self.dialog = None
 
+    def _get_users(self):
+        users = self.cognito_middleware.get_users()
+        formatted_users = {}
+        for user in users:
+            attributes = {
+                attr["Name"]: attr["Value"] for attr in user.get("Attributes", [])
+            }
+            if "given_name" in attributes and "family_name" in attributes:
+                user_id = user["Username"]
+                name = f"{attributes['given_name']} {attributes['family_name'][0]}"
+                formatted_users[user_id] = name
+        return formatted_users
+
     def _add_ticket(self, dialog):
         try:
             if not self.new_ticket_input.is_valid:
@@ -101,6 +115,11 @@ class TicketsComponent:
             elif isinstance(due_date, datetime):
                 due_date = due_date.strftime("%Y-%m-%d %H:%M:%S.%f")
 
+            # Get selected user IDs
+            assigned_users = self.new_ticket_input.assigned_users
+            if not assigned_users:
+                assigned_users = [user_id]
+
             ticket = TicketModel(
                 ticket_id=str(uuid.uuid4()),
                 user_id=user_id,
@@ -115,6 +134,7 @@ class TicketsComponent:
                 ticket_updated_by=user_id,
                 ticket_assigned_to=[user_id],
                 ticket_comments=[],
+                ticket_tags=assigned_users,  # Store user IDs in tags
             )
 
             item = {
@@ -129,10 +149,11 @@ class TicketsComponent:
                 "ticket_created_by": {"S": str(ticket.ticket_created_by)},
                 "ticket_updated_on": {"S": str(ticket.ticket_updated_on)},
                 "ticket_updated_by": {"S": str(ticket.ticket_updated_by)},
-                "ticket_assigned_to": {
-                    "L": [{"S": str(user)} for user in ticket.ticket_assigned_to]
-                },
+                "ticket_assigned_to": {"L": [{"S": str(user_id)}]},
                 "ticket_comments": {"L": []},
+                "ticket_tags": {
+                    "L": [{"S": str(user_id)} for user_id in assigned_users]
+                },
             }
 
             self.dynamo_middleware.put_item(item)
@@ -201,21 +222,65 @@ class TicketsComponent:
                     ).style("height:100%;width:100%;").bind_value_to(
                         self.new_ticket_input, "description"
                     )
-                with ui.row().classes("w-full flex justify-end flex-row"):
-                    ui.button("Cancel", on_click=dialog.close).props("flat")
-                    ui.button("Add", on_click=lambda: self._add_ticket(dialog)).props(
-                        "flat"
+                with ui.row().classes("w-full flex justify-between items-center mt-4"):
+                    ui.select(
+                        options=self._get_users(),
+                        with_input=True,
+                        multiple=True,
+                        label="Assign Users",
+                    ).props("outlined dense use-chips").classes(
+                        "w-[40%]"
+                    ).bind_value_to(
+                        self.new_ticket_input, "assigned_users"
                     )
+                    with ui.row().classes("gap-2"):
+                        ui.button("Cancel", on_click=dialog.close).props("flat")
+                        ui.button(
+                            "Add", on_click=lambda: self._add_ticket(dialog)
+                        ).props("flat")
             dialog.open()
 
     def _get_tickets(self):
         user_id = self.cognito_middleware.get_user_id()
-        expression_values = {":uid": {"S": user_id}, ":status": {"S": "pending"}}
-        response = self.dynamo_middleware.scan(
+
+        # Get user's own tickets
+        own_tickets_expression = {":uid": {"S": user_id}, ":status": {"S": "pending"}}
+        own_tickets_response = self.dynamo_middleware.scan(
             filter_expression="user_id = :uid AND ticket_status = :status",
-            expression_attribute_values=expression_values,
+            expression_attribute_values=own_tickets_expression,
         )
-        return response["Items"] if "Items" in response else []
+
+        # Get tickets where user is tagged
+        tagged_tickets_expression = {
+            ":uid": {"S": user_id},
+            ":status": {"S": "pending"},
+        }
+        tagged_tickets_response = self.dynamo_middleware.scan(
+            filter_expression="contains(ticket_tags, :uid) AND ticket_status = :status",
+            expression_attribute_values=tagged_tickets_expression,
+        )
+
+        # Combine and deduplicate tickets
+        all_tickets = []
+        seen_ticket_ids = set()
+
+        # Add own tickets
+        if "Items" in own_tickets_response:
+            for ticket in own_tickets_response["Items"]:
+                ticket_id = ticket["ticket_id"]["S"]
+                if ticket_id not in seen_ticket_ids:
+                    all_tickets.append(ticket)
+                    seen_ticket_ids.add(ticket_id)
+
+        # Add tagged tickets
+        if "Items" in tagged_tickets_response:
+            for ticket in tagged_tickets_response["Items"]:
+                ticket_id = ticket["ticket_id"]["S"]
+                if ticket_id not in seen_ticket_ids:
+                    all_tickets.append(ticket)
+                    seen_ticket_ids.add(ticket_id)
+
+        return all_tickets
 
     def parse_date(self, date_str):
         try:

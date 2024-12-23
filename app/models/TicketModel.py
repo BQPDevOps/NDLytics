@@ -17,6 +17,7 @@ class TicketModel(BaseModel):
     ticket_due_date: datetime
     ticket_comments: List[Dict]
     ticket_status: str
+    ticket_tags: List[str]
 
     class Config:
         json_encoders = {datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")}
