@@ -53,7 +53,7 @@ class ActivitiesComponent:
             force_refresh=self.force_refresh
         )
         self.widgets["placement_metrics"] = create_placement_metrics_widget(
-            force_refresh=True
+            force_refresh=self.force_refresh
         )
 
     def refresh_activities(self):
