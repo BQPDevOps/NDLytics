@@ -28,12 +28,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
             "Other": ["CRA", "DEC", "SKP", "RTP"],
         }
 
-        # Verify data loaded from parent
-        for dataset in self.required_datasets:
-            df = self.data_store.get(dataset)
-            if df is not None:
-                print(f"{dataset} shape: {df.shape}")
-
         if self.is_recalc_needed() or self.force_refresh:
             self._calculate_metrics()
 
@@ -692,7 +686,6 @@ class CollectionEffectivenessWidget(WidgetFramework):
                         ui.label(f"Weekend/Weekday Ratio: {weekend_ratio:.2f}")
 
         except Exception as e:
-            print(f"Error in payment patterns: {str(e)}")
             ui.label("Error processing payment pattern data").classes("text-lg")
 
 
