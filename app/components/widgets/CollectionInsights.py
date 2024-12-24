@@ -317,10 +317,15 @@ class CollectionInsightsWidget(WidgetFramework):
         """Render the complete insights dashboard."""
         metrics = self.get_cached()
 
-        with ui.card().classes("w-full p-6"):
-            ui.label("Collection Intelligence Analysis").classes(
-                "text-2xl font-bold mb-4"
-            )
+        with ui.card().classes("w-full p-6 max-h-[76vh]"):
+            with ui.row().classes("flex justify-between items-center gap- w-full"):
+                ui.label("Collection Intelligence Analysis").classes(
+                    "text-2xl font-bold"
+                )
+                ui.button(
+                    icon="refresh",
+                    on_click=lambda: [self._calculate_metrics(), self.render()],
+                ).props("round flat")
 
             # Create insight category tabs
             with ui.tabs().classes("w-full") as tabs:
@@ -402,7 +407,7 @@ class CollectionInsightsWidget(WidgetFramework):
                             ui.label(value).classes("font-bold")
 
         # AI Insights
-        with ui.card().classes("p-4 mt-6"):
+        with ui.card().classes("p-4 mt-6 max-h-[30vh] overflow-y-auto"):
             ui.label("AI-Generated Insights").classes("text-lg font-bold mb-4")
             insights = self._get_insights("payment_patterns")
             with ui.column().classes("gap-4"):

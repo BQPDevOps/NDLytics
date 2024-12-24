@@ -86,9 +86,9 @@ class ActivitiesComponent:
                     border-radius: 0;
                     """
                 )
-        ui.button(icon="refresh", on_click=self.refresh_activities).props(
-            "round size=sm"
-        )
+        # ui.button(icon="refresh", on_click=self.refresh_activities).props(
+        #     "round size=sm"
+        # )
 
     @ui.refreshable
     def render_activity_feed(self):
