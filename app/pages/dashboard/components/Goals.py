@@ -38,9 +38,19 @@ class GoalsComponent:
         self.style_manager = StyleManager()
         self._config()
         self.user_record = self._get_user_record()
-        self.user_goals = (
-            self.user_record.get("goals", {}).get("L", []) if self.user_record else []
-        )
+
+        # Safe initialization of user_goals
+        self.user_goals = []
+        try:
+            if isinstance(self.user_record, dict):
+                goals_data = self.user_record.get("goals", {})
+                if isinstance(goals_data, dict):
+                    self.user_goals = goals_data.get("L", [])
+                elif isinstance(goals_data, list):
+                    self.user_goals = goals_data
+        except Exception as e:
+            print(f"Error initializing user_goals: {e}")
+            self.user_goals = []
 
     def _config(self):
         self.style_manager.set_styles(
@@ -81,20 +91,20 @@ class GoalsComponent:
             user_id = self.cognito_middleware.get_user_id()
             if not user_id:
                 print("Could not get user_id")
-                return None
+                return {}
 
             # Get username from storage
             username = self.session_manager.get_from_storage("username")
             if not username:
                 print("Could not get username from storage")
-                return None
+                return {}
 
             # Get company_id from Cognito attributes
             attributes = self.cognito_middleware.get_all_custom_attributes(username)
             company_id = attributes.get("custom:company_id")
             if not company_id:
                 print(f"No company_id found for user {username}")
-                return None
+                return {}
 
             # Create the key for DynamoDB query
             key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
@@ -102,14 +112,17 @@ class GoalsComponent:
             # Get user record from DynamoDB
             try:
                 user_record = self.dynamo_middleware.get_item(key)
-                return user_record if user_record else None
+                if not isinstance(user_record, dict):
+                    print("User record is not a dictionary")
+                    return {}
+                return user_record
             except Exception as e:
                 print(f"Error getting user record from DynamoDB: {e}")
-                return None
+                return {}
 
         except Exception as e:
             print(f"Error in _get_user_record: {e}")
-            return None
+            return {}
 
     def render(self):
         goals = self.user_goals

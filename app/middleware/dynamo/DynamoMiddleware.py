@@ -27,6 +27,30 @@ Example expression attribute values:
 """
 
 
+def dynamo_to_json(item):
+    """Convert a DynamoDB item to a regular Python dictionary."""
+    if not item:
+        return None
+
+    result = {}
+    for key, value in item.items():
+        # Get the first (and only) key in the value dictionary
+        type_key = list(value.keys())[0]
+        result[key] = value[type_key]
+
+        # Convert numeric strings to integers or floats
+        if type_key == "N":
+            try:
+                if "." in result[key]:
+                    result[key] = float(result[key])
+                else:
+                    result[key] = int(result[key])
+            except ValueError:
+                pass  # Keep as string if conversion fails
+
+    return result
+
+
 class DynamoMiddleware:
     def __init__(self, table_name):
         self.dynamo_client = boto3.client("dynamodb")
@@ -37,11 +61,11 @@ class DynamoMiddleware:
         if "Item" not in response:
             return None
 
-        return response["Item"]
+        return dynamo_to_json(response["Item"])
 
     def get_all_items(self):
         response = self.dynamo_client.scan(TableName=self.table_name)
-        return response["Items"]
+        return [dynamo_to_json(item) for item in response["Items"]]
 
     def put_item(self, item):
         response = self.dynamo_client.put_item(TableName=self.table_name, Item=item)
@@ -76,7 +100,7 @@ class DynamoMiddleware:
             QueryExpression=query_expression,
             ExpressionAttributeValues=expression_attribute_values,
         )
-        return response
+        return [dynamo_to_json(item) for item in response.get("Items", [])]
 
     def scan(self, filter_expression=None, expression_attribute_values=None):
         params = {"TableName": self.table_name}
@@ -87,7 +111,7 @@ class DynamoMiddleware:
             params["ExpressionAttributeValues"] = expression_attribute_values
 
         response = self.dynamo_client.scan(**params)
-        return response
+        return [dynamo_to_json(item) for item in response.get("Items", [])]
 
 
 def create_dynamo_middleware(table_name):

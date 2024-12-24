@@ -74,31 +74,37 @@ class WidgetFramework(ABC):
             return metrics
         return {}
 
-    def update_metric_cache(self, new_metrics: dict):
-        def to_dynamo_type(value):
-            if isinstance(value, dict):
-                return {"M": {k: to_dynamo_type(v) for k, v in value.items()}}
-            if isinstance(value, list):
-                return {"L": [to_dynamo_type(v) for v in value]}
-            if isinstance(value, bool):
-                return {"BOOL": value}
-            if isinstance(value, (int, float)):
-                return {"N": str(value)}
-            return {"S": str(value)}
+    def update_metric_cache(self, metrics):
+        """Update the metric cache in DynamoDB"""
+        if not metrics:
+            return
 
-        # Get current cache
-        current_cache = self._pull_metric_cache()
+        key = {"widget_id": {"S": self.widget_id}, "company_id": {"S": self.company_id}}
 
-        # Update widget portion
-        current_cache[self.widget_id] = new_metrics
+        # Create update expression for flattened structure
+        update_expression = "SET "
+        expression_values = {}
 
-        # Update in DynamoDB
-        key = {"company_id": {"S": self.company_id}}
-        update_expression = "SET metric_cache = :mc"
-        expression_values = {":mc": to_dynamo_type(current_cache)}
+        for k, v in metrics.items():
+            update_expression += f"#{k} = :{k}, "
+            expression_values[f":{k}"] = v
 
-        self.dynamo_client.update_item(key, update_expression, expression_values)
-        self.cached_metrics = new_metrics
+        # Remove trailing comma and space
+        update_expression = update_expression.rstrip(", ")
+
+        # Add expression attribute names
+        expression_names = {f"#{k}": k for k in metrics.keys()}
+
+        try:
+            self.dynamo_client.update_item(
+                key=key,
+                update_expression=update_expression,
+                expression_attribute_values=expression_values,
+                expression_attribute_names=expression_names,
+            )
+        except Exception as e:
+            print(f"Error updating metric cache: {str(e)}")
+            raise
 
     def is_recalc_needed(self):
         return not bool(self.cached_metrics)
