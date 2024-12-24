@@ -33,18 +33,16 @@ class TicketTableComponent:
             {
                 "ticket_table_component": {
                     "title_container": """
-                    display:flex;
-                    justify-content:flex-end;
-                    align-items:center;
-                    padding-left:1rem;
-                    padding-right:1rem;
-                    width:100%;
-                    height:2.5rem;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0 0.5rem;
+                    width: 100%;
+                    height: 2.5rem;
                     background-color:#FFFFFF;
-                    border-radius:5px;
-                    border:1px solid rgba(192,192,192,0.3);
-                    box-shadow:0 0 0 1px rgba(192,192,192,0.4);
-                    background-color:rgba(192,192,192,0.1);
+                    border-radius: 5px;
+                    border: 1px solid rgba(88,152,212,0.3);
+                    box-shadow: 0 0 0 1px rgba(88,152,212,0.2);
                     """,
                     "add_ticket_modal_header_container": """
                     display:flex;
@@ -191,14 +189,15 @@ class TicketTableComponent:
 
         with ui.column().classes("w-full h-full"):
             with ui.row().style(
-                self.style_manager.get_style("task_table_component.title_container")
+                self.style_manager.get_style("ticket_table_component.title_container")
             ):
-                with ui.column().classes("flex-grow justify-center"):
-                    ui.label("Tasks")
-                with ui.column().classes("flex flex-grow items-end justify-center"):
-                    ui.button(icon="add", on_click=self._open_add_ticket_modal).props(
-                        "round size=sm"
+                with ui.row():
+                    ui.label("Tasks").style(
+                        "font-size: 0.9rem; color: #666; font-weight: 400;"
                     )
+                ui.button(icon="add", on_click=self._open_add_ticket_modal).props(
+                    "round size=sm"
+                )
             with ui.column().classes("w-full h-[76vh]"):
                 with ui.list().classes("w-full"):
                     with ui.item():

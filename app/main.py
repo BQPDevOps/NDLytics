@@ -108,6 +108,13 @@ def root_goals():
     return goals_page(session_manager)
 
 
+@ui.page("/tickets")
+@permission_required("dashboard_view")
+def root_tickets():
+    session_manager = SessionManager()
+    return tickets_page(session_manager)
+
+
 @ui.page("/settings")
 @permission_required("dashboard_view")
 def root_settings():
