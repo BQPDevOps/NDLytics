@@ -1,6 +1,13 @@
 from nicegui import ui
 from core import StandardPage
 from .components import *
+from components import ActionBar
+from .components.ListView import ListViewComponent
+from .components.NewTicketForm import NewTicketFormComponent
+from .components.KanbanView import KanbanViewComponent
+from middleware.dynamo import DynamoMiddleware
+from middleware.cognito import CognitoMiddleware
+from config import config
 
 
 class TicketsPage(StandardPage):
@@ -16,37 +23,73 @@ class TicketsPage(StandardPage):
                 "nav_position": "top",
             },
         )
+        self.dynamo_middleware = DynamoMiddleware(config.aws_tickets_table_name)
+        self.cognito_middleware = CognitoMiddleware()
         self.state = {
+            "active_view": "list",
             "selected_ticket": None,
+            "tickets": self._get_tickets(),
         }
-
-    def on_click_select_ticket(self, ticket):
-        self.state["selected_ticket"] = ticket
-        self._render_ticket_sidebar.refresh()
-
-    @ui.refreshable
-    def _render_ticket_sidebar(self):
-        if self.state["selected_ticket"]:
-            ticket_view_component = TicketViewComponent(self.state)
-            ticket_view_component.render()
-        else:
-            recent_activity_component = RecentActivityComponent(self.state)
-            recent_activity_component.render()
-
-    def page_content(self):
-        ticket_table_component = TicketTableComponent(
-            self.state, self.on_click_select_ticket
+        self.new_ticket_form = NewTicketFormComponent(
+            on_ticket_created=self.refresh_tickets
         )
 
-        with ui.grid(columns=4).style("width:100%;height:100%;gap:0"):
-            with ui.column().classes("col-span-3 p-2").style(
-                "border-right:1px solid rgba(192,192,192,0.3);box-shadow:0 0 0 1px rgba(192,192,192,0.3);"
-            ):
-                ticket_table_component.render()
-            with ui.column().classes("col-span-1 p-2").style(
-                "border-right:1px solid rgba(192,192,192,0.3);box-shadow:0 0 0 1px rgba(192,192,192,0.3);"
-            ):
-                self._render_ticket_sidebar()
+    def _get_tickets(self):
+        user_id = self.cognito_middleware.get_user_id()
+        expression_values = {":uid": {"S": user_id}}
+
+        response = self.dynamo_middleware.scan(
+            filter_expression="contains(ticket_tags, :uid)",
+            expression_attribute_values=expression_values,
+        )
+        return response
+
+    def switch_view(self, view):
+        self.state["active_view"] = view
+        self.render_content.refresh()
+
+    def on_select_ticket(self, ticket):
+        self.state["selected_ticket"] = ticket
+        self.render_content.refresh()
+
+    def refresh_tickets(self):
+        self.state["tickets"] = self._get_tickets()
+        self.render_content.refresh()
+
+    @ui.refreshable
+    def render_content(self):
+        with ui.element("transition").props(
+            "appear enter-active-class='animated fadeIn' leave-active-class='animated fadeOut'"
+        ).classes("w-full"):
+            if self.state["active_view"] == "list":
+                with ui.element("div").classes("list-container").style("width: 100%"):
+                    ListViewComponent(self.state, self.on_select_ticket).render()
+
+            elif self.state["active_view"] == "kanban":
+                with ui.element("div").classes("kanban-container").style("width: 100%"):
+                    KanbanViewComponent(
+                        self.state, on_ticket_updated=self.refresh_tickets
+                    ).render()
+
+    def page_content(self):
+        with ui.column().classes("w-full h-full p-4"):
+            with ui.row().style("width:100%;"):
+                ActionBar(
+                    views=[
+                        {"label": "List", "value": "list"},
+                        {"label": "Kanban", "value": "kanban"},
+                    ],
+                    active_view=self.state["active_view"],
+                    on_view_switch=self.switch_view,
+                    actions=[
+                        {
+                            "icon": "add",
+                            "label": "Add",
+                            "on_click": lambda: self.new_ticket_form.open(),
+                        }
+                    ],
+                ).render()
+            self.render_content()
 
 
 def tickets_page(session_manager):

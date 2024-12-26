@@ -1,5 +1,11 @@
-from .TicketTable import TicketTableComponent
+from .NewTicketForm import NewTicketFormComponent
+from .KanbanView import KanbanViewComponent
+from .ListView import ListViewComponent
 from .TicketView import TicketViewComponent
-from .RecentActivity import RecentActivityComponent
 
-__all__ = ["TicketTableComponent", "TicketViewComponent", "RecentActivityComponent"]
+__all__ = [
+    "NewTicketFormComponent",
+    "KanbanViewComponent",
+    "ListViewComponent",
+    "TicketViewComponent",
+]
