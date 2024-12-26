@@ -94,7 +94,7 @@ class ActivitiesComponent:
     def render_activity_feed(self):
         with ui.element("transition").props(
             "appear enter-active-class='animated fadeIn' leave-active-class='animated fadeOut'"
-        ):
+        ).classes("w-full"):
             if self.active_view == "strategy":
                 with ui.element("div").classes("strategy-container").style(
                     "width: 100%"
