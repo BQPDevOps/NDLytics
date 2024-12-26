@@ -63,12 +63,9 @@ class GoalTableComponent:
         self._config()
         self.user_record = self._get_user_record()
         # Extract goals from user record, default to empty list if not found
-        self.user_goals = (
-            self.user_record.get("goals", {}).get("L", []) if self.user_record else []
-        )
+        self.user_goals = self.user_record.get("goals", []) if self.user_record else []
 
     def _config(self):
-
         self.style_manager.set_styles(
             {
                 "goal_table_component": {
@@ -113,7 +110,7 @@ class GoalTableComponent:
             "custom:company_id"
         )
 
-        # Create the key for DynamoDB query with both partition and sort key
+        # Create the key for DynamoDB query
         key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
 
         # Get user record from DynamoDB
@@ -121,7 +118,7 @@ class GoalTableComponent:
             user_record = self.dynamo_middleware.get_item(key)
             return user_record if user_record else None
         except Exception as e:
-            ic(f"Error getting user record: {e}")
+            print(f"Error getting user record: {e}")
             return None
 
     def _open_add_goal_modal(self):
@@ -183,7 +180,7 @@ class GoalTableComponent:
         if isinstance(due_date, datetime):
             due_date = due_date.strftime("%Y-%m-%d %H:%M:%S.%f")
 
-        # Create new goal in DynamoDB format
+        # Create new goal with flattened structure
         new_goal = {
             "M": {
                 "goal_id": {"S": str(uuid.uuid4())},
@@ -204,7 +201,7 @@ class GoalTableComponent:
         # Get the current user record
         user_record = self._get_user_record()
         if not user_record:
-            ic("No user record found")
+            print("No user record found")
             return
 
         # Create the key for DynamoDB update
@@ -235,11 +232,11 @@ class GoalTableComponent:
             dialog.close()
 
             # Convert the new goal to regular format and select it
-            formatted_goal = dynamo_to_json(new_goal)
+            formatted_goal = dynamo_to_json(new_goal["M"])
             self.on_click_select_goal(formatted_goal)
 
         except Exception as e:
-            ic(f"Error updating user record: {e}")
+            print(f"Error updating user record: {e}")
 
     def _reset_and_close(self, dialog):
         self.goal_input = NewGoalInput()

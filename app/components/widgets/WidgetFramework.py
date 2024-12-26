@@ -19,6 +19,7 @@ class WidgetFramework(ABC):
         }
         self.required_datasets = self.widget_configuration["required_datasets"]
         self.company_id = self.widget_configuration["company_id"]
+        self.user_id = self.widget_configuration.get("user_id", "")
         self.widget_id = self.widget_configuration["widget_id"]
         self.data_store = {}
         self._pull_required_data()
@@ -74,37 +75,25 @@ class WidgetFramework(ABC):
             return metrics
         return {}
 
-    def update_metric_cache(self, metrics):
-        """Update the metric cache in DynamoDB"""
-        if not metrics:
-            return
+    def update_metric_cache(self, metric_data):
+        if not self.user_id:
+            key = {"company_id": {"S": self.company_id}}
+        else:
+            key = {"user_id": {"S": self.user_id}, "company_id": {"S": self.company_id}}
 
-        key = {"widget_id": {"S": self.widget_id}, "company_id": {"S": self.company_id}}
+        # Flatten the metric data to avoid excessive nesting
+        flattened_data = {}
+        for k, v in metric_data.items():
+            if isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    flattened_data[f"{k}_{sub_k}"] = {"S": str(sub_v)}
+            else:
+                flattened_data[k] = {"S": str(v)}
 
-        # Create update expression for flattened structure
-        update_expression = "SET "
-        expression_values = {}
+        update_expression = "SET metric_cache = :mc"
+        expression_values = {":mc": {"M": flattened_data}}
 
-        for k, v in metrics.items():
-            update_expression += f"#{k} = :{k}, "
-            expression_values[f":{k}"] = v
-
-        # Remove trailing comma and space
-        update_expression = update_expression.rstrip(", ")
-
-        # Add expression attribute names
-        expression_names = {f"#{k}": k for k in metrics.keys()}
-
-        try:
-            self.dynamo_client.update_item(
-                key=key,
-                update_expression=update_expression,
-                expression_attribute_values=expression_values,
-                expression_attribute_names=expression_names,
-            )
-        except Exception as e:
-            print(f"Error updating metric cache: {str(e)}")
-            raise
+        self.dynamo_client.update_item(key, update_expression, expression_values)
 
     def is_recalc_needed(self):
         return not bool(self.cached_metrics)

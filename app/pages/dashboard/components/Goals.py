@@ -34,23 +34,11 @@ class GoalsComponent:
         self.session_manager = session_manager
         self.cognito_middleware = CognitoMiddleware()
         self.dynamo_middleware = DynamoMiddleware(config.aws_users_table_name)
-        self.attributes = self._load_user_data()
         self.style_manager = StyleManager()
         self._config()
         self.user_record = self._get_user_record()
-
-        # Safe initialization of user_goals
-        self.user_goals = []
-        try:
-            if isinstance(self.user_record, dict):
-                goals_data = self.user_record.get("goals", {})
-                if isinstance(goals_data, dict):
-                    self.user_goals = goals_data.get("L", [])
-                elif isinstance(goals_data, list):
-                    self.user_goals = goals_data
-        except Exception as e:
-            print(f"Error initializing user_goals: {e}")
-            self.user_goals = []
+        # Extract goals from user record, default to empty list if not found
+        self.user_goals = self.user_record.get("goals", []) if self.user_record else []
 
     def _config(self):
         self.style_manager.set_styles(
@@ -86,47 +74,42 @@ class GoalsComponent:
         return attributes
 
     def _get_user_record(self):
+        # Get current user ID from Cognito
+        user_id = self.cognito_middleware.get_user_id()
+
+        # Get username from storage
+        username = self.session_manager.get_from_storage("username")
+
+        # Get company_id from Cognito attributes
+        company_id = self.cognito_middleware.get_all_custom_attributes(username).get(
+            "custom:company_id"
+        )
+
+        # Create the key for DynamoDB query with both partition and sort key
+        key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
+
+        # Get user record from DynamoDB
         try:
-            # Get current user ID from Cognito
-            user_id = self.cognito_middleware.get_user_id()
-            if not user_id:
-                print("Could not get user_id")
-                return {}
-
-            # Get username from storage
-            username = self.session_manager.get_from_storage("username")
-            if not username:
-                print("Could not get username from storage")
-                return {}
-
-            # Get company_id from Cognito attributes
-            attributes = self.cognito_middleware.get_all_custom_attributes(username)
-            company_id = attributes.get("custom:company_id")
-            if not company_id:
-                print(f"No company_id found for user {username}")
-                return {}
-
-            # Create the key for DynamoDB query
-            key = {"user_id": {"S": user_id}, "company_id": {"S": company_id}}
-
-            # Get user record from DynamoDB
-            try:
-                user_record = self.dynamo_middleware.get_item(key)
-                if not isinstance(user_record, dict):
-                    print("User record is not a dictionary")
-                    return {}
-                return user_record
-            except Exception as e:
-                print(f"Error getting user record from DynamoDB: {e}")
-                return {}
-
+            user_record = self.dynamo_middleware.get_item(key)
+            return user_record if user_record else None
         except Exception as e:
-            print(f"Error in _get_user_record: {e}")
-            return {}
+            print(f"Error getting user record: {e}")
+            return None
 
     def render(self):
         goals = self.user_goals
-        formatted_goals = [dynamo_to_json(goal["M"]) for goal in goals]
+        formatted_goals = []
+        for goal in goals:
+            if isinstance(goal, dict) and "M" in goal:
+                formatted_goal = {}
+                for key, value in goal["M"].items():
+                    # Extract the actual value from the DynamoDB format
+                    for val_type, val in value.items():
+                        formatted_goal[key] = val
+                formatted_goals.append(formatted_goal)
+            else:
+                formatted_goals.append(goal)
+
         active_goals = []
         completed_goals = []
 

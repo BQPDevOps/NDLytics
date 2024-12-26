@@ -47,19 +47,17 @@ class ClientMetricsWidget(WidgetFramework):
 
     def _calculate_metrics(self):
         """Calculate all metrics and cache them"""
+        metrics = {}
+
         # Calculate client metrics
         client_metrics = self._calculate_client_metrics()
+        metrics["client_metrics"] = client_metrics
 
-        # Flatten metrics structure for DynamoDB
-        flattened_metrics = {
-            "last_modified": {"N": str(int(datetime.now().timestamp()))},
-            "metrics_data": {
-                "S": str(client_metrics)
-            },  # Convert to string to avoid nesting
-        }
+        # Add timestamp
+        metrics["last_modified"] = int(datetime.now().timestamp())
 
-        # Update cache with flattened structure
-        self.update_metric_cache(flattened_metrics)
+        # Update cache
+        self.update_metric_cache(metrics)
 
     def _calculate_client_metrics(self):
         """Calculate aggregate performance metrics at client level"""
@@ -73,21 +71,19 @@ class ClientMetricsWidget(WidgetFramework):
             lambda x: self._safe_date_convert(x, "payment_date"), axis=1
         )
 
-        metrics_summary = []
+        clients = []
         for client_number in accounts_df["client_number"].unique():
             client_accounts = accounts_df[accounts_df["client_number"] == client_number]
             client_payments = transactions_df[
                 transactions_df["file_number"].isin(client_accounts["file_number"])
             ]
 
-            # Calculate basic metrics
             total_placements = len(client_accounts["listed_date"].unique())
-            total_loaded = float(client_accounts["original_upb_loaded"].sum())
+            total_loaded = client_accounts["original_upb_loaded"].sum()
             total_accounts = len(client_accounts)
-            total_collected = float(client_payments["payment_amount"].sum())
+            total_collected = client_payments["payment_amount"].sum()
             paying_accounts = client_payments["file_number"].nunique()
 
-            # Calculate percentages
             avg_liquidation = (
                 (total_collected / total_loaded * 100) if total_loaded > 0 else 0
             )
@@ -95,21 +91,50 @@ class ClientMetricsWidget(WidgetFramework):
                 (paying_accounts / total_accounts * 100) if total_accounts > 0 else 0
             )
 
-            # Create flattened metric structure
-            client_metric = {
-                "client_number": client_number,
-                "total_placements": total_placements,
-                "total_loaded": total_loaded,
-                "total_accounts": total_accounts,
-                "total_collected": total_collected,
-                "paying_accounts": paying_accounts,
-                "avg_liquidation": round(avg_liquidation, 2),
-                "avg_activation": round(avg_activation, 2),
-            }
+            monthly_rates = []
+            for placement_date in client_accounts["listed_date"].unique():
+                if pd.isna(placement_date):
+                    continue
 
-            metrics_summary.append(client_metric)
+                placement = client_accounts[
+                    client_accounts["listed_date"] == placement_date
+                ]
+                placement_loaded = placement["original_upb_loaded"].sum()
 
-        return metrics_summary
+                if placement_loaded > 0:
+                    placement_collected = transactions_df[
+                        transactions_df["file_number"].isin(placement["file_number"])
+                    ]["payment_amount"].sum()
+                    monthly_rates.append((placement_collected / placement_loaded) * 100)
+
+            liquidation_std = np.std(monthly_rates) if monthly_rates else 0
+
+            performance_trend = 0
+            if len(monthly_rates) >= 2:
+                recent_half = monthly_rates[len(monthly_rates) // 2 :]
+                older_half = monthly_rates[: len(monthly_rates) // 2]
+                performance_trend = (
+                    np.mean(recent_half) - np.mean(older_half)
+                    if recent_half and older_half
+                    else 0
+                )
+
+            clients.append(
+                {
+                    "client_number": client_number,
+                    "total_placements": total_placements,
+                    "total_loaded": round(total_loaded, 2),
+                    "total_collected": round(total_collected, 2),
+                    "total_accounts": total_accounts,
+                    "paying_accounts": paying_accounts,
+                    "avg_liquidation": round(avg_liquidation, 2),
+                    "avg_activation": round(avg_activation, 2),
+                    "liquidation_std": round(liquidation_std, 2),
+                    "performance_trend": round(performance_trend, 2),
+                }
+            )
+
+        return clients
 
     def render(self):
         """Render the client metrics dashboard"""
