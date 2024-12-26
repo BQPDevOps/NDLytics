@@ -85,6 +85,13 @@ application_lists = {
             "permissions": ["dashboard_view"],
         },
         {
+            "title": "Tickets",
+            "icon": "flag",
+            "color": "rgba(255,255,255,1)",
+            "route": "/tickets",
+            "permissions": ["dashboard_view"],
+        },
+        {
             "title": "Settings",
             "icon": "settings",
             "color": "rgba(255,255,255,1)",
