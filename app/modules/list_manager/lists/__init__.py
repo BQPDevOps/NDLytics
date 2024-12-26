@@ -86,7 +86,7 @@ application_lists = {
         },
         {
             "title": "Tickets",
-            "icon": "flag",
+            "icon": "confirmation_number",
             "color": "rgba(255,255,255,1)",
             "route": "/tickets",
             "permissions": ["dashboard_view"],

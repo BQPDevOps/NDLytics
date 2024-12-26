@@ -79,6 +79,7 @@ class ListViewComponent:
                     "ticket_tags": ticket.get("ticket_tags", {}).get("S", ""),
                     "ticket_id": ticket.get("ticket_id", {}).get("S", ""),
                     "user_id": ticket.get("user_id", {}).get("S", ""),
+                    "ticket_comments": ticket.get("ticket_comments", {"L": []}),
                 },
             }
             for ticket in tickets.get("Items", [])
