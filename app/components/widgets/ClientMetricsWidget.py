@@ -3,12 +3,15 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from .WidgetFramework import WidgetFramework
+from modules import ListManager
 
 
 class ClientMetricsWidget(WidgetFramework):
     def __init__(self, widget_configuration: dict):
         super().__init__(widget_configuration)
         self.force_refresh = widget_configuration.get("force_refresh", False)
+        self.list_manager = ListManager()
+        self.client_map = self.list_manager.get_list("client_map")
 
         # Verify data loaded from parent
         for dataset in self.required_datasets:
@@ -145,13 +148,17 @@ class ClientMetricsWidget(WidgetFramework):
 
             if "client_metrics" in metrics:
                 client_metrics = pd.DataFrame(metrics["client_metrics"])
+                client_names = [
+                    self.client_map.get(str(num), f"Client {num}")
+                    for num in client_metrics["client_number"]
+                ]
 
                 # Create summary chart
                 chart_data = {
                     "chart": {"type": "column"},
                     "title": {"text": "Client Portfolio Performance"},
                     "xAxis": {
-                        "categories": client_metrics["client_number"].tolist(),
+                        "categories": client_names,
                         "labels": {"rotation": -45},
                     },
                     "yAxis": [
@@ -192,9 +199,11 @@ class ClientMetricsWidget(WidgetFramework):
                 with ui.grid(columns=3).classes("w-full gap-6 mt-6"):
                     for _, client in client_metrics.iterrows():
                         with ui.card().classes("p-4"):
-                            ui.label(f"Client {client['client_number']}").classes(
-                                "text-lg font-bold mb-2"
+                            client_name = self.client_map.get(
+                                str(client["client_number"]),
+                                f"Client {client['client_number']}",
                             )
+                            ui.label(client_name).classes("text-lg font-bold mb-2")
                             with ui.column().classes("gap-2"):
                                 ui.label(f"Placements: {client['total_placements']}")
                                 ui.label(
@@ -214,9 +223,7 @@ class ClientMetricsWidget(WidgetFramework):
                                     f"Avg Activation: {client['avg_activation']:.1f}%"
                                 )
                                 ui.label(
-                                    f"Performance Trend: "
-                                    f"{'↑' if client['performance_trend'] > 0 else '↓'} "
-                                    f"{abs(client['performance_trend']):.1f}%"
+                                    f"Performance Trend: {'↑' if client['performance_trend'] > 0 else '↓'} {abs(client['performance_trend']):.1f}%"
                                 )
 
 

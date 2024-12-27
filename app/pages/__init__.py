@@ -11,6 +11,7 @@ from .resolutions import resolutions_page
 from .reports import reports_page
 from .tickets import tickets_page
 
+
 __all__ = [
     "signin_page",
     "unauthorized_page",
