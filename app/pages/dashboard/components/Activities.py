@@ -55,6 +55,12 @@ class ActivitiesComponent:
         self.widgets["placement_metrics"] = create_placement_metrics_widget(
             force_refresh=self.force_refresh
         )
+        self.widgets["call_analysis"] = create_call_analysis_widget(
+            force_refresh=self.force_refresh
+        )
+        self.widgets["transaction_analysis"] = create_transaction_analysis_widget(
+            force_refresh=self.force_refresh
+        )
 
     def refresh_activities(self):
         self.force_refresh = True
@@ -86,9 +92,6 @@ class ActivitiesComponent:
                     border-radius: 0;
                     """
                 )
-        # ui.button(icon="refresh", on_click=self.refresh_activities).props(
-        #     "round size=sm"
-        # )
 
     @ui.refreshable
     def render_activity_feed(self):
@@ -99,12 +102,15 @@ class ActivitiesComponent:
                 with ui.element("div").classes("strategy-container").style(
                     "width: 100%"
                 ):
+                    self.widgets["transaction_analysis"].render()
                     self.widgets["collection_effectiveness"].render()
 
             elif self.active_view == "performance":
                 with ui.element("div").classes("performance-container").style(
                     "width: 100%"
                 ):
+
+                    self.widgets["call_analysis"].render()
                     self.widgets["placement_metrics"].render()
                     self.widgets["client_metrics"].render()
 
